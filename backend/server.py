@@ -217,6 +217,85 @@ async def download_attachment(workorder_id: str):
         media_type='application/octet-stream'
     )
 
+@api_router.get("/workorders/export/excel")
+async def export_to_excel(
+    search: Optional[str] = None,
+    requestor: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None
+):
+    # Build query (same as get_workorders)
+    query = {}
+    
+    if search:
+        query['ot_number'] = {'$regex': search, '$options': 'i'}
+    
+    if requestor:
+        query['requestor'] = {'$regex': requestor, '$options': 'i'}
+    
+    if date_from or date_to:
+        date_query = {}
+        if date_from:
+            date_query['$gte'] = date_from
+        if date_to:
+            date_query['$lte'] = date_to
+        if date_query:
+            query['created_at'] = date_query
+    
+    # Get workorders
+    workorders = await db.workorders.find(query, {"_id": 0, "_stored_filename": 0}).sort('created_at', -1).to_list(1000)
+    
+    if not workorders:
+        raise HTTPException(status_code=404, detail="No work orders found to export")
+    
+    # Convert to DataFrame
+    df_data = []
+    for wo in workorders:
+        df_data.append({
+            'Número de OT': wo.get('ot_number', ''),
+            'Fecha y Hora': wo.get('created_at', ''),
+            'Solicitante': wo.get('requestor', ''),
+            'Detalle de la Tarea': wo.get('task_detail', ''),
+            'Número de Service Desk': wo.get('service_desk_number', ''),
+            'Observaciones': wo.get('observations', ''),
+            'Tiene Adjunto': 'Sí' if wo.get('attachment_filename') else 'No',
+            'Nombre del Archivo': wo.get('attachment_filename', '')
+        })
+    
+    df = pd.DataFrame(df_data)
+    
+    # Create Excel file in memory
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name='Órdenes de Trabajo', index=False)
+        
+        # Auto-adjust column widths
+        worksheet = writer.sheets['Órdenes de Trabajo']
+        for idx, col in enumerate(df.columns):
+            max_length = max(
+                df[col].astype(str).apply(len).max(),
+                len(col)
+            )
+            worksheet.column_dimensions[chr(65 + idx)].width = min(max_length + 2, 50)
+    
+    output.seek(0)
+    
+    # Generate filename with timestamp
+    timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+    filename = f"ordenes_trabajo_{timestamp}.xlsx"
+    
+    # Save to temp file and return
+    temp_path = UPLOADS_DIR / filename
+    async with aiofiles.open(temp_path, 'wb') as f:
+        await f.write(output.getvalue())
+    
+    return FileResponse(
+        path=temp_path,
+        filename=filename,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        background=None
+    )
+
 # Include the router in the main app
 app.include_router(api_router)
 
