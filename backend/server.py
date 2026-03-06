@@ -272,8 +272,10 @@ async def export_to_excel(
         # Auto-adjust column widths
         worksheet = writer.sheets['Órdenes de Trabajo']
         for idx, col in enumerate(df.columns):
+            # Convert to string and handle NaN values
+            col_lengths = df[col].fillna('').astype(str).apply(len)
             max_length = max(
-                df[col].astype(str).apply(len).max(),
+                col_lengths.max() if len(col_lengths) > 0 else 0,
                 len(col)
             )
             worksheet.column_dimensions[chr(65 + idx)].width = min(max_length + 2, 50)
