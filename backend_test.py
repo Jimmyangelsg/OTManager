@@ -178,6 +178,62 @@ class WorkOrderAPITester:
         )
         return success, response
 
+    def test_export_excel_all(self):
+        """Test Excel export without filters"""
+        success, response = self.run_test(
+            "Export All Work Orders to Excel",
+            "GET",
+            "workorders/export/excel",
+            200
+        )
+        if success and isinstance(response, bytes):
+            print(f"   Excel file size: {len(response)} bytes")
+            # Check if it's a valid Excel file by checking the header
+            if response.startswith(b'PK'):  # Excel files are ZIP-based
+                print("   ✅ Valid Excel file format detected")
+            else:
+                print("   ❌ Invalid Excel file format")
+                return False
+        return success
+
+    def test_export_excel_with_filters(self, search=None, requestor=None):
+        """Test Excel export with filters"""
+        endpoint = "workorders/export/excel"
+        params = []
+        if search:
+            params.append(f"search={search}")
+        if requestor:
+            params.append(f"requestor={requestor}")
+        
+        if params:
+            endpoint += "?" + "&".join(params)
+
+        success, response = self.run_test(
+            f"Export Filtered Work Orders to Excel (filters: {params})",
+            "GET",
+            endpoint,
+            200
+        )
+        if success and isinstance(response, bytes):
+            print(f"   Excel file size: {len(response)} bytes")
+            # Check if it's a valid Excel file
+            if response.startswith(b'PK'):
+                print("   ✅ Valid Excel file format detected")
+            else:
+                print("   ❌ Invalid Excel file format")
+                return False
+        return success
+
+    def test_export_excel_no_data(self):
+        """Test Excel export when no data exists"""
+        success, response = self.run_test(
+            "Export Excel with No Data",
+            "GET",
+            "workorders/export/excel",
+            404  # Should return 404 when no data
+        )
+        return success
+
     def test_error_cases(self):
         """Test various error scenarios"""
         print("\n🔍 Testing Error Cases...")
