@@ -147,33 +147,45 @@ export default function Dashboard() {
               <p className="text-sm text-slate-600 mt-1">IBM Maximo - Control Personal</p>
             </div>
             
-            <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-              <SheetTrigger asChild>
-                <Button 
-                  data-testid="create-workorder-button"
-                  className="bg-[#0F62FE] hover:bg-[#0043CE] text-white h-9 px-4 rounded-sm font-medium text-sm transition-colors"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Nueva OT
-                </Button>
-              </SheetTrigger>
-              <SheetContent className="sm:max-w-[600px] w-full">
-                <SheetHeader>
-                  <SheetTitle className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'Chivo, sans-serif' }}>
-                    Crear Nueva Orden de Trabajo
-                  </SheetTitle>
-                  <SheetDescription>
-                    Complete los detalles de la orden de trabajo recibida en IBM Maximo
-                  </SheetDescription>
-                </SheetHeader>
-                <CreateWorkOrderForm 
-                  onSuccess={() => {
-                    setIsCreateOpen(false);
-                    fetchWorkOrders();
-                  }}
-                />
-              </SheetContent>
-            </Sheet>
+            <div className="flex gap-2">
+              <Button
+                data-testid="export-excel-button"
+                onClick={handleExportToExcel}
+                variant="outline"
+                className="h-9 px-4 rounded-sm font-medium text-sm border-[#0F62FE] text-[#0F62FE] hover:bg-[#0F62FE] hover:text-white transition-colors"
+              >
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Exportar a Excel
+              </Button>
+              
+              <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                <SheetTrigger asChild>
+                  <Button 
+                    data-testid="create-workorder-button"
+                    className="bg-[#0F62FE] hover:bg-[#0043CE] text-white h-9 px-4 rounded-sm font-medium text-sm transition-colors"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Nueva OT
+                  </Button>
+                </SheetTrigger>
+                <SheetContent className="sm:max-w-[600px] w-full">
+                  <SheetHeader>
+                    <SheetTitle className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'Chivo, sans-serif' }}>
+                      Crear Nueva Orden de Trabajo
+                    </SheetTitle>
+                    <SheetDescription>
+                      Complete los detalles de la orden de trabajo recibida en IBM Maximo
+                    </SheetDescription>
+                  </SheetHeader>
+                  <CreateWorkOrderForm 
+                    onSuccess={() => {
+                      setIsCreateOpen(false);
+                      fetchWorkOrders();
+                    }}
+                  />
+                </SheetContent>
+              </Sheet>
+            </div>
           </div>
 
           {/* Search and Filters */}
