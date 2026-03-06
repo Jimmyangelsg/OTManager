@@ -1,0 +1,192 @@
+{
+  "identity": {
+    "name": "E1",
+    "archetype": "The Industrial Precision Designer",
+    "mission": "Create a high-density, functional, and aesthetically sharp work order management system that feels like a professional tool, not a generic admin panel.",
+    "principles": [
+      "Density is Clarity: Use tight spacing to show more data without clutter.",
+      "Function over Form: Every pixel must serve a purpose. No decorative gradients.",
+      "Industrial Aesthetics: Use technical fonts, sharp borders, and high-contrast colors.",
+      "Speed is a Feature: Interactions must be instant. Hover states should be snappy."
+    ]
+  },
+  "typography": {
+    "fonts": {
+      "headings": {
+        "family": "Chivo, sans-serif",
+        "weights": ["700", "900"],
+        "usage": "Page titles, Section headers, Modal titles"
+      },
+      "body": {
+        "family": "Manrope, sans-serif",
+        "weights": ["400", "500", "600"],
+        "usage": "General text, Form labels, Button text"
+      },
+      "mono": {
+        "family": "JetBrains Mono, monospace",
+        "weights": ["400", "500"],
+        "usage": "OT Numbers, Dates, IDs, Status codes"
+      }
+    },
+    "scale": {
+      "h1": "text-3xl font-black tracking-tight",
+      "h2": "text-2xl font-bold tracking-tight",
+      "h3": "text-xl font-bold tracking-tight",
+      "body": "text-sm leading-relaxed",
+      "small": "text-xs font-medium text-muted-foreground",
+      "mono": "text-xs font-mono tracking-wide"
+    }
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "default": "#0F62FE",
+        "hover": "#0043CE",
+        "foreground": "#FFFFFF",
+        "description": "IBM Technical Blue - Use for primary actions, active states, and key highlights."
+      },
+      "secondary": {
+        "default": "#F4F4F5",
+        "hover": "#E4E4E7",
+        "foreground": "#18181B",
+        "description": "Industrial Grey - Use for secondary buttons, backgrounds, and borders."
+      },
+      "accent": {
+        "default": "#FF4F00",
+        "foreground": "#FFFFFF",
+        "description": "Safety Orange - Use sparingly for 'Urgent' tags, alerts, or critical notifications."
+      },
+      "background": {
+        "default": "#FFFFFF",
+        "subtle": "#F8FAFC",
+        "overlay": "rgba(255, 255, 255, 0.8)"
+      },
+      "text": {
+        "primary": "#0F172A",
+        "secondary": "#64748B",
+        "muted": "#94A3B8"
+      },
+      "border": {
+        "default": "#E2E8F0",
+        "active": "#CBD5E1"
+      }
+    },
+    "usage_rules": [
+      "Never use gradients for backgrounds.",
+      "Use the 'Technical Blue' only for the main call-to-action.",
+      "Use 'Safety Orange' ONLY for alerts or high-priority status.",
+      "Borders should be subtle (slate-200) but sharp (1px)."
+    ]
+  },
+  "layout": {
+    "grid_system": {
+      "dashboard": "grid grid-cols-1 md:grid-cols-[240px_1fr] h-screen overflow-hidden",
+      "form": "grid grid-cols-1 md:grid-cols-2 gap-6",
+      "card_grid": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+    },
+    "spacing": {
+      "container_padding": "p-6 md:p-8",
+      "section_gap": "gap-8",
+      "item_gap": "gap-4",
+      "dense_gap": "gap-2"
+    },
+    "containers": {
+      "card": "bg-white border border-border shadow-sm rounded-none md:rounded-sm",
+      "sidebar": "bg-slate-50 border-r border-border h-full flex flex-col",
+      "main": "flex-1 overflow-auto bg-white"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2 rounded-sm font-medium text-sm transition-colors",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 px-4 py-2 rounded-sm font-medium text-sm transition-colors",
+      "ghost": "hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2 rounded-sm font-medium text-sm transition-colors",
+      "icon": "h-8 w-8 p-0 rounded-sm"
+    },
+    "inputs": {
+      "default": "flex h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+      "label": "text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 block"
+    },
+    "table": {
+      "wrapper": "w-full overflow-auto border border-border rounded-sm",
+      "header": "h-10 px-4 text-left align-middle font-medium text-muted-foreground bg-slate-50/50 border-b border-border",
+      "row": "border-b border-border transition-colors hover:bg-slate-50/50 data-[state=selected]:bg-muted",
+      "cell": "p-3 align-middle [&:has([role=checkbox])]:pr-0 text-sm font-medium"
+    },
+    "status_badge": {
+      "base": "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+      "variants": {
+        "new": "border-transparent bg-blue-100 text-blue-800 hover:bg-blue-200",
+        "in_progress": "border-transparent bg-yellow-100 text-yellow-800 hover:bg-yellow-200",
+        "completed": "border-transparent bg-green-100 text-green-800 hover:bg-green-200",
+        "urgent": "border-transparent bg-orange-100 text-orange-800 hover:bg-orange-200"
+      }
+    }
+  },
+  "visual_enhancers": {
+    "shadows": {
+      "card": "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
+      "dropdown": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+      "modal": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)"
+    },
+    "borders": {
+      "default": "1px solid #E2E8F0",
+      "focus": "2px solid #0F62FE"
+    },
+    "radius": {
+      "default": "0.25rem",
+      "small": "0.125rem",
+      "full": "9999px"
+    }
+  },
+  "assets": {
+    "icons": {
+      "library": "lucide-react",
+      "style": "stroke-width: 1.5px; size: 16px or 20px"
+    },
+    "images": {
+      "login_bg": "https://images.unsplash.com/photo-1767658647133-2168a9cfc1d1?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "sidebar_texture": "https://images.unsplash.com/photo-1716034348277-de478adc743e?crop=entropy&cs=srgb&fm=jpg&q=85"
+    }
+  },
+  "instructions_to_main_agent": {
+    "general": [
+      "Follow the 'Industrial Precision' theme strictly.",
+      "Use 'Chivo' for all headings and 'Manrope' for body text.",
+      "Use 'JetBrains Mono' for any ID, Date, or Code-like data.",
+      "Ensure all interactive elements have hover states.",
+      "Use the defined color palette. Do not introduce new colors unless necessary for status indication.",
+      "Prioritize density in the dashboard table. It should look like a professional tool."
+    ],
+    "layout_specifics": {
+      "dashboard": "Create a sidebar layout. The main content should be a large, filterable table of Work Orders.",
+      "create_ot_form": "Use a slide-over (Sheet) or a clean Modal for creating OTs. Do not navigate away from the dashboard.",
+      "details_view": "When clicking a row, open a detailed view (Sheet or Modal) to keep context."
+    },
+    "component_usage": {
+      "tables": "Use the custom table styles defined in 'components.table'. Add a 'zebra-stripe' effect if readability is low.",
+      "forms": "Use 'react-hook-form' with 'zod' validation. Labels should be uppercase and small.",
+      "toasts": "Use 'sonner' for all notifications (Success, Error)."
+    }
+  },
+  "universal_guidelines": [
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy",
+    "Use glass-morphism effects with backdrop filters (12-24px blur) sparingly, mostly for overlays.",
+    "You MUST NOT apply universal transition. Eg: transition: all. This results in breaking transforms. Always add transitions for specific interactive elements like button, input excluding transforms",
+    "You MUST NOT center align the app container, ie do not add .App { text-align: center; } in the css file. This disrupts the human natural reading flow of text",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style",
+    "NEVER: use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯📚🎭🎬🎪🎉🎊🎁🎀🎂🍰🎈🎨🎰💰💵💳🏦💎🪙💸🤑📊📈📉💹🔢🏆🥇 etc for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "Main agent relies on these image URLs. Missing categories (especially sponsor logos) = main agent will use placeholder text which is FORBIDDEN",
+    "Prioritize using pre-existing components from src/components/ui when applicable",
+    "Create new components that match the style and conventions of existing components when needed",
+    "Examine existing components to understand the project's component patterns before creating new ones",
+    "Components MUST use named exports (export const ComponentName = ...)",
+    "Pages MUST use default exports (export default function PageName() {...})",
+    "Use sonner for toasts. Sonner component are located in /app/src/components/ui/sonner.tsx"
+  ]
+}
