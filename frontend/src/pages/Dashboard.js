@@ -103,6 +103,37 @@ export default function Dashboard() {
     }
   };
 
+  const handleExportToExcel = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (searchTerm) params.append('search', searchTerm);
+      if (filterRequestor) params.append('requestor', filterRequestor);
+      
+      const response = await axios.get(`${API}/workorders/export/excel?${params.toString()}`, {
+        responseType: 'blob'
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      link.setAttribute('download', `ordenes_trabajo_${timestamp}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Archivo Excel exportado exitosamente');
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
+      if (error.response?.status === 404) {
+        toast.error('No hay órdenes de trabajo para exportar');
+      } else {
+        toast.error('Error al exportar a Excel');
+      }
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col bg-white">
       {/* Header */}
