@@ -350,6 +350,52 @@ def main():
     # Test error cases
     tester.test_error_cases()
 
+    # Test Excel export with data
+    print("\n📊 Testing Excel Export Functionality...")
+    
+    # First, create some test data for export
+    print("   Creating test data for export...")
+    test_wo1_id = tester.test_create_workorder(
+        "OT-2024-001",
+        requestor="Juan Pérez",
+        task_detail="Mantenimiento servidor",
+        service_desk_number="SD-001",
+        observations="Prueba de exportación"
+    )
+    
+    test_wo2_id = tester.test_create_workorder(
+        "OT-2024-002", 
+        requestor="María García",
+        task_detail="Actualización sistema",
+        service_desk_number="SD-002"
+    )
+    
+    test_wo3_id = tester.test_create_workorder(
+        "OT-2024-003",
+        requestor="Carlos López", 
+        task_detail="Soporte técnico",
+        service_desk_number="SD-003"
+    )
+
+    if test_wo1_id and test_wo2_id and test_wo3_id:
+        # Test export all work orders
+        tester.test_export_excel_all()
+        
+        # Test export with search filter
+        tester.test_export_excel_with_filters(search="OT-2024-001")
+        
+        # Test export with requestor filter
+        tester.test_export_excel_with_filters(requestor="Juan")
+        
+        # Clean up test data
+        print("\n🧹 Cleaning up export test data...")
+        tester.test_delete_workorder(test_wo1_id)
+        tester.test_delete_workorder(test_wo2_id)
+        tester.test_delete_workorder(test_wo3_id)
+        
+        # Test export with no data (should return 404)
+        tester.test_export_excel_no_data()
+
     # Test deletion
     print("\n🗑️ Testing Work Order Deletion...")
     tester.test_delete_workorder(wo1_id)
