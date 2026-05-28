@@ -47,6 +47,7 @@ class WorkOrder(BaseModel):
     observations: Optional[str] = None
     attachment_filename: Optional[str] = None
     attachment_url: Optional[str] = None
+    sort_order: float = 0.0
 
 class WorkOrderCreate(BaseModel):
     ot_number: str
@@ -72,11 +73,17 @@ async def root():
 async def create_workorder(input: WorkOrderCreate):
     wo_dict = input.model_dump()
     wo_obj = WorkOrder(**wo_dict)
-    
+
+    # Assign sort_order so new OTs appear at the top by default
+    # Find current max sort_order and add 1
+    last = await db.workorders.find_one({}, sort=[('sort_order', -1)], projection={"sort_order": 1})
+    next_sort = (last.get('sort_order', 0) + 1.0) if last else 1.0
+    wo_obj.sort_order = next_sort
+
     # Convert to dict and serialize datetime to ISO string for MongoDB
     doc = wo_obj.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
-    
+
     _ = await db.workorders.insert_one(doc)
     return wo_obj
 
@@ -106,13 +113,15 @@ async def get_workorders(
             query['created_at'] = date_query
     
     # Exclude MongoDB's _id field from the query results
-    workorders = await db.workorders.find(query, {"_id": 0}).sort('created_at', -1).to_list(1000)
-    
+    # Sort by sort_order DESC (manual order); fall back to created_at for legacy rows where sort_order = 0
+    workorders = await db.workorders.find(query, {"_id": 0}).sort([('sort_order', -1), ('created_at', -1)]).to_list(1000)
+
     # Convert ISO string timestamps back to datetime objects
     for wo in workorders:
         if isinstance(wo['created_at'], str):
             wo['created_at'] = datetime.fromisoformat(wo['created_at'])
-    
+        wo.setdefault('sort_order', 0.0)
+
     return workorders
 
 @api_router.get("/workorders/{workorder_id}", response_model=WorkOrder)
@@ -161,6 +170,31 @@ async def delete_workorder(workorder_id: str):
         raise HTTPException(status_code=404, detail="Work order not found")
     
     return {"message": "Work order deleted successfully"}
+
+class ReorderRequest(BaseModel):
+    ordered_ids: List[str]
+
+@api_router.post("/workorders/reorder")
+async def reorder_workorders(payload: ReorderRequest):
+    """
+    Re-assigns sort_order for the provided list of work order ids.
+    The first id in the list gets the highest sort_order (top of the list).
+    """
+    if not payload.ordered_ids:
+        return {"message": "No ids provided", "updated": 0}
+
+    total = len(payload.ordered_ids)
+    updated = 0
+    # Highest sort_order = top. First item in list -> top.
+    for index, wo_id in enumerate(payload.ordered_ids):
+        new_order = float(total - index)
+        result = await db.workorders.update_one(
+            {"id": wo_id},
+            {"$set": {"sort_order": new_order}}
+        )
+        updated += result.modified_count
+
+    return {"message": "Order updated", "updated": updated, "total": total}
 
 @api_router.post("/workorders/{workorder_id}/upload")
 async def upload_attachment(workorder_id: str, file: UploadFile = File(...)):
