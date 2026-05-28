@@ -1,0 +1,44 @@
+{
+  "summary": "Re-test post-fixes (iter 3 -> iter 4). Both blocking issues from iter 3 are resolved: (1) admin email moved to admin@local.dev — POST /api/auth/login returns 200 with httpOnly cookies; (2) Sonner Toaster moved to bottom-right — no overlap with the top-right user-menu-button. Re-ran full pytest suite (29/29 PASS — the previously xfail-ed admin login is now a normal PASS) and re-verified the frontend flows that were blocked in iter 3.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth_and_workorders.py",
+    "/app/test_reports/pytest/iteration_4.xml"
+  ],
+  "verifications": {
+    "backend_admin_login": "curl POST /api/auth/login {admin@local.dev/admin123} -> 200, body contains access_token + role=admin; cookies access_token & refresh_token are set (httpOnly).",
+    "backend_pytest": "29/29 PASSED in 13.03s (test_login_admin_seeded converted from xfail to regular PASS). All Auth, Lockout, WorkordersAuth, WorkordersCRUD, UserIsolation and Exports classes pass.",
+    "frontend_login_error_inline": "Wrong password on /login renders div[data-testid='login-error'] with text 'Email o contraseña incorrectos'. Inline error visible, not a toast.",
+    "frontend_toast_position": "After register, the [data-sonner-toaster] element bottom=1056 (viewport 1080) — bottom-right. user-menu-button rect: x=1696,y=20,w=40,h=40 (top-right). Zero overlap.",
+    "frontend_avatar_click_after_register": "Clicked [data-testid='user-menu-button'] WITHOUT force immediately after register navigation -> dropdown menu opened on first try (role=menu present in DOM).",
+    "frontend_logout_via_ui": "Clicked [data-testid='logout-button'] inside the dropdown -> navigated to /login; new GET /api/auth/me returns 401."
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Both reported issues from iteration 3 are fixed correctly and minimally: ADMIN_EMAIL in backend/.env changed to admin@local.dev (and seed_admin re-inserted the admin in Mongo with bcrypt hash $2b$) and <Toaster position='bottom-right'/> added in App.js.",
+    "Optional follow-up (not blocking): consider replacing EmailStr in LoginRequest/RegisterRequest with a custom validator OR documenting that .test/.localhost/.invalid TLDs are intentionally rejected — anyone re-introducing those reserved TLDs in .env will reproduce the iter-3 bug.",
+    "Optional follow-up: /app/memory/test_credentials.md was already updated to admin@local.dev — good.",
+    "Backend continues to use httpOnly + Secure + SameSite=None cookies for the HTTPS preview; bcrypt is correctly applied; brute-force lockout (429) after 5 fails still works."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_auth_and_workorders.py (replaced xfail-ed test_login_admin_seeded with a normal assertion against admin@local.dev now that the fix is in place)"
+  ],
+  "success_rate": {
+    "backend": "100% (29/29 pytest)",
+    "frontend": "100% on the 3 scoped fixes (login error inline, toast non-overlap, logout via UI)"
+  },
+  "test_credentials": "admin@local.dev / admin123 (works); test users created during this run: e2e_iter4_<ts>@example.com / pass1234, TEST_REG_*/A/B/RESET/LOCK_* (existing seed leftovers from previous iterations).",
+  "seed_data_creation": "1 dashboard user (e2e_iter4_<ts>@example.com) + auth-side TEST_REG_*, TEST_A_*, TEST_B_*, TEST_RESET_*, TEST_LOCK_* users from the pytest run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Both fixes from iteration 3 are verified. App is in a fully-passing state. If new features are added on top of auth/workorders, simply re-run /app/backend/tests/test_auth_and_workorders.py for regression — admin@local.dev/admin123 is the working admin credential.",
+  "rca of the issue": "Not applicable — this was a verification iteration. The original RCA (EmailStr in pydantic rejecting reserved-TLD .test) and the toast/avatar z-overlap are both confirmed resolved by E1's two fixes."
+}

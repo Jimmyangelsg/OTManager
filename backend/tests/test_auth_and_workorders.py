@@ -94,14 +94,13 @@ class TestAuth:
         assert r.status_code == 400
 
     def test_login_admin_seeded(self):
-        """KNOWN ISSUE: pydantic EmailStr rejects .test TLD (reserved)."""
+        """Admin email moved to @local.dev to bypass EmailStr reserved-TLD rejection."""
         s = _new_session()
-        r = s.post(f"{API}/auth/login", json={"email": "admin@local.test", "password": "admin123"})
-        if r.status_code == 422:
-            pytest.xfail("CRITICAL BUG: seeded admin email admin@local.test rejected by EmailStr (reserved TLD .test)")
+        r = s.post(f"{API}/auth/login", json={"email": "admin@local.dev", "password": "admin123"})
         assert r.status_code == 200, r.text
-        assert r.json()["email"] == "admin@local.test"
+        assert r.json()["email"] == "admin@local.dev"
         assert "access_token" in s.cookies
+        assert "refresh_token" in s.cookies
 
     def test_login_wrong_password(self, user_a):
         s = _new_session()

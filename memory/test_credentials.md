@@ -1,7 +1,7 @@
 # Test Credentials
 
 ## Admin (seeded on startup)
-- Email: `admin@local.test`
+- Email: `admin@local.dev`
 - Password: `admin123`
 - Role: `admin`
 - Pregunta de seguridad: "Pregunta por defecto del admin (cambiar luego)"
