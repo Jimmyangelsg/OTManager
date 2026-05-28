@@ -30,7 +30,7 @@ Aplicación web local para registrar, gestionar y realizar seguimiento de órden
 ### Acceso
 La aplicación está corriendo en modo local. Accede desde tu navegador:
 ```
-https://task-manager-443.preview.emergentagent.com
+https://orden-trabajo-local.preview.emergentagent.com
 ```
 
 ### Crear una Nueva OT
