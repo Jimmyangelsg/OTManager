@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import axios from 'axios';
 import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -8,10 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, X } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import api, { formatApiErrorDetail } from '@/lib/api';
+import { STATUS_OPTIONS } from '@/lib/status';
 
 const formSchema = z.object({
   ot_number: z.string().min(1, 'El número de OT es obligatorio'),
@@ -24,49 +23,38 @@ const formSchema = z.object({
 export default function CreateWorkOrderForm({ onSuccess }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [status, setStatus] = useState('pending');
 
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm({
-    resolver: zodResolver(formSchema),
-  });
+  } = useForm({ resolver: zodResolver(formSchema) });
 
   const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
-    }
-  };
-
-  const removeFile = () => {
-    setSelectedFile(null);
+    if (e.target.files && e.target.files[0]) setSelectedFile(e.target.files[0]);
   };
 
   const onSubmit = async (data) => {
     setIsSubmitting(true);
-
     try {
-      // Create work order
-      const response = await axios.post(`${API}/workorders`, data);
+      const response = await api.post('/workorders', { ...data, status });
       const workOrderId = response.data.id;
 
-      // Upload file if selected
       if (selectedFile) {
         const formData = new FormData();
         formData.append('file', selectedFile);
-        await axios.post(`${API}/workorders/${workOrderId}/upload`, formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
+        await api.post(`/workorders/${workOrderId}/upload`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
         });
       }
 
-      toast.success('Orden de trabajo creada exitosamente');
+      toast.success('Orden de trabajo creada');
       onSuccess();
     } catch (error) {
       console.error('Error creating work order:', error);
-      toast.error('Error al crear la orden de trabajo');
+      const msg = formatApiErrorDetail(error.response?.data?.detail) || 'Error al crear la OT';
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -83,11 +71,30 @@ export default function CreateWorkOrderForm({ onSuccess }) {
           id="ot_number"
           {...register('ot_number')}
           placeholder="Ej: OT-2024-001"
-          className="h-9 rounded-sm border-slate-300 focus:ring-1 focus:ring-[#0F62FE]"
+          className="h-10 rounded-md border-slate-300 focus:ring-2 focus:ring-[#0F62FE]/20 focus:border-[#0F62FE]"
         />
-        {errors.ot_number && (
-          <p className="text-xs text-red-600 mt-1">{errors.ot_number.message}</p>
-        )}
+        {errors.ot_number && <p className="text-xs text-red-600 mt-1">{errors.ot_number.message}</p>}
+      </div>
+
+      <div>
+        <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block">
+          Estado
+        </Label>
+        <Select value={status} onValueChange={setStatus}>
+          <SelectTrigger className="h-10 rounded-md border-slate-300" data-testid="create-status-select">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                <span className="inline-flex items-center gap-2">
+                  <span className={`h-2 w-2 rounded-full ${opt.dot}`} />
+                  {opt.label}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div>
@@ -99,7 +106,7 @@ export default function CreateWorkOrderForm({ onSuccess }) {
           id="requestor"
           {...register('requestor')}
           placeholder="Nombre del solicitante"
-          className="h-9 rounded-sm border-slate-300 focus:ring-1 focus:ring-[#0F62FE]"
+          className="h-10 rounded-md border-slate-300 focus:ring-2 focus:ring-[#0F62FE]/20 focus:border-[#0F62FE]"
         />
       </div>
 
@@ -113,7 +120,7 @@ export default function CreateWorkOrderForm({ onSuccess }) {
           {...register('task_detail')}
           placeholder="Descripción detallada de la tarea..."
           rows={4}
-          className="rounded-sm border-slate-300 focus:ring-1 focus:ring-[#0F62FE]"
+          className="rounded-md border-slate-300 focus:ring-2 focus:ring-[#0F62FE]/20 focus:border-[#0F62FE]"
         />
       </div>
 
@@ -126,7 +133,7 @@ export default function CreateWorkOrderForm({ onSuccess }) {
           id="service_desk_number"
           {...register('service_desk_number')}
           placeholder="Ej: SD-12345"
-          className="h-9 rounded-sm border-slate-300 focus:ring-1 focus:ring-[#0F62FE]"
+          className="h-10 rounded-md border-slate-300 focus:ring-2 focus:ring-[#0F62FE]/20 focus:border-[#0F62FE]"
         />
       </div>
 
@@ -140,7 +147,7 @@ export default function CreateWorkOrderForm({ onSuccess }) {
           {...register('observations')}
           placeholder="Observaciones adicionales..."
           rows={3}
-          className="rounded-sm border-slate-300 focus:ring-1 focus:ring-[#0F62FE]"
+          className="rounded-md border-slate-300"
         />
       </div>
 
@@ -149,14 +156,14 @@ export default function CreateWorkOrderForm({ onSuccess }) {
           Archivo Adjunto
         </Label>
         {selectedFile ? (
-          <div data-testid="selected-file-display" className="flex items-center justify-between p-3 border border-slate-300 rounded-sm bg-slate-50">
+          <div data-testid="selected-file-display" className="flex items-center justify-between p-3 border border-slate-300 rounded-md bg-slate-50">
             <span className="text-sm text-slate-700 truncate flex-1">{selectedFile.name}</span>
             <Button
               data-testid="remove-file-button"
               type="button"
               variant="ghost"
               size="sm"
-              onClick={removeFile}
+              onClick={() => setSelectedFile(null)}
               className="h-8 w-8 p-0 ml-2 hover:bg-slate-200"
             >
               <X className="h-4 w-4" />
@@ -169,12 +176,12 @@ export default function CreateWorkOrderForm({ onSuccess }) {
               id="file"
               type="file"
               onChange={handleFileChange}
-              className="h-9 rounded-sm border-slate-300"
+              className="h-10 rounded-md border-slate-300"
             />
             <Button
               type="button"
               variant="outline"
-              className="h-9 px-4 rounded-sm whitespace-nowrap"
+              className="h-10 px-4 rounded-md whitespace-nowrap"
               onClick={() => document.getElementById('file').click()}
             >
               <Upload className="h-4 w-4 mr-2" />
@@ -190,7 +197,7 @@ export default function CreateWorkOrderForm({ onSuccess }) {
           data-testid="submit-workorder-button"
           type="submit"
           disabled={isSubmitting}
-          className="flex-1 bg-[#0F62FE] hover:bg-[#0043CE] text-white h-10 px-4 rounded-sm font-medium"
+          className="flex-1 bg-gradient-to-r from-[#0F62FE] to-[#0043CE] text-white h-11 rounded-md font-medium"
         >
           {isSubmitting ? 'Creando...' : 'Crear Orden de Trabajo'}
         </Button>

@@ -1,0 +1,69 @@
+{
+  "summary": "Full backend (pytest, 28 passed / 1 xfail) and frontend e2e (registration, login, logout, forgot-password, OT creation with status, user isolation, export menu) testing for the new JWT-auth + status + pagination features. Found 1 CRITICAL backend bug (seeded admin email rejected by EmailStr) and 1 UX issue (toast overlaps user-menu-button).",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "/api/auth/login (and any endpoint receiving admin@local.test)",
+        "issue": "Pydantic EmailStr (email-validator) rejects '.test' as a reserved/special-use TLD, returning 422. The seeded admin (admin@local.test / admin123 in backend/.env) therefore CAN NEVER LOG IN. Reproduce: curl -X POST $URL/api/auth/login -d '{\"email\":\"admin@local.test\",\"password\":\"admin123\"}' -H 'Content-Type: application/json' => 422 'The part after the @-sign is a special-use or reserved name'. Fix options: (a) change ADMIN_EMAIL in backend/.env to admin@local.dev or admin@example.com and rerun seed_admin (note: seed_admin already supports updating password, but only finds by current ADMIN_EMAIL); (b) keep raw 'str' for LoginRequest.email (not EmailStr) and validate manually; (c) enable email_validator with allow_special_use=True / test_environment=True. Same problem will affect ANY user who registers with a .test/.invalid/.localhost address.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Dashboard header (Sonner Toaster)",
+        "issue": "The toast notification (¡Cuenta creada! / ¡Bienvenido! / Orden de trabajo creada) is rendered in the top-right corner and visually OVERLAPS the user-menu-button (40x40 at ~x=1696,y=20). During the 4s the toast is visible the avatar/dropdown trigger is effectively unclickable (Radix DropdownMenu doesn't open on pointerdown when the toast overlay intercepts pointer events). Reproduce: register a user, immediately try to click the avatar -> menu doesn't open until the toast disappears. Fix: reposition toaster to top-center or bottom-right, or offset top-right toaster below the header bar (e.g. `<Toaster position=\"top-center\"/>` or `offset={{ top: 80 }}`).",
+        "selector": "[data-testid=\"user-menu-button\"] vs Sonner toast container",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "Login page",
+        "issue": "On wrong password the page stays on /login (correct) but no visible error/toast was rendered in our test (no element with role=alert / class*=destructive / class*=error appeared). Confirm whether errors are shown via Sonner toast (which could be missed/transient).",
+        "selector": "[data-testid=\"login-form\"]",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Dashboard header",
+        "issues": [
+          "Header right cluster (Exportar + avatar) is partially covered by the success toast on first load; consider repositioning the toast or compressing header.",
+          "When dashboard has 0 OTs, the empty state still allows opening 'Filtros'/'Exportar' — fine, but exporting empty list could be disabled."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth_and_workorders.py",
+    "/app/test_reports/pytest/iteration_3.xml"
+  ],
+  "action_items": [
+    "[CRITICAL] Fix admin login: change backend/.env ADMIN_EMAIL to a non-reserved TLD (e.g. admin@local.dev) OR loosen EmailStr usage in LoginRequest/RegisterRequest. After changing, re-run seed_admin so it inserts/updates the new admin record. Update /app/memory/test_credentials.md accordingly.",
+    "[MEDIUM] Reposition Sonner Toaster so it does not overlap user-menu-button (use position='top-center' or add top offset).",
+    "[LOW] Confirm error feedback on invalid login is visibly rendered (toast/error). Consider an inline error message component for clearer UX."
+  ],
+  "critical_code_review_comments": [
+    "auth.py / server.py - LoginRequest and RegisterRequest both use EmailStr from email-validator which rejects reserved TLDs (.test, .localhost, .invalid). This conflicts with the documented default admin email admin@local.test and will surprise developers/testers. Either change the seed email or relax validation for these models.",
+    "server.py seed_admin - The function only updates the admin doc whose email == ADMIN_EMAIL. If an operator changes ADMIN_EMAIL to fix the .test issue, the previous admin doc with the old email will become orphaned. Consider cleaning up or making seed idempotent across renames.",
+    "Sonner Toaster default position (top-right) collides with the header avatar; place the <Toaster/> with explicit position prop or move the avatar elsewhere.",
+    "Dashboard.js line 205-270 - two adjacent DropdownMenus (Export and User) in the same header — fine, but increases the risk of overlay conflicts with the toaster.",
+    "auth.py - good: bcrypt is used (hashes start with $2b$), security answer is hashed + trim + lowercase normalized, brute-force lockout works (returns 429 after 5 fails), httpOnly Secure SameSite=None cookies are set as needed for the HTTPS preview.",
+    "Backend pagination envelope is consistent ({items,page,page_size,total,total_pages}); status filter validates allowed values and returns 400 on invalid; PDF export returns valid %PDF bytes with content-type application/pdf; Excel export includes 'Estado' column. All user-scoping checks (GET/PUT/DELETE/reorder) correctly return 404 for cross-user access."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_auth_and_workorders.py (NEW - replaces deleted /app/backend/tests/test_workorders.py)"
+  ],
+  "success_rate": {
+    "backend": "97% (28/29 pytest cases passing; 1 xfailed for admin@local.test login - real bug)",
+    "frontend": "90% (registration, login, dashboard, OT create with status, status badge, export menu, isolation, forgot-password reset+case-insensitive answer all PASS; logout-via-UI temporarily blocked by toast overlap)"
+  },
+  "test_credentials": "Seeded admin admin@local.test/admin123 is DEFINED in backend/.env but CANNOT log in due to EmailStr validation. Created during tests: TEST_*@example.com users (pass1234) and e2e_*_<ts>@example.com users (pass1234).",
+  "seed_data_creation": "Several TEST_REG_*, TEST_A_*, TEST_B_*, TEST_RESET_*, TEST_LOCK_*, e2e_user1_*, e2e_a_*, e2e_b_*, e2e_log_* users were created in Mongo. Some test work-orders are cleaned up via fixtures; lockout-locked TEST_LOCK_* users remain in DB until lockout expires.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "After E1 fixes the admin email TLD bug, retest: (1) curl /api/auth/login with the new admin creds returns 200 and sets cookies; (2) /app/memory/test_credentials.md is updated; (3) the toast no longer covers user-menu-button (visual + functional click on avatar opens dropdown immediately after register/login). All other backend/frontend behavior already verified - re-run /app/backend/tests/test_auth_and_workorders.py for regression.",
+  "rca of the issue": "EmailStr in pydantic delegates validation to the email-validator package, whose default config rejects RFC-2606 special-use TLDs (.test, .localhost, .invalid, .example). Since both LoginRequest.email and RegisterRequest.email are typed EmailStr, the seed admin 'admin@local.test' is rejected before reaching the password check, returning HTTP 422. The admin is correctly written to Mongo at startup (bcrypt hash $2b$...) but is unreachable through the public auth endpoints. Mitigation: change ADMIN_EMAIL to admin@local.dev (or admin@example.com which is allowed) OR replace EmailStr with a custom validator that accepts reserved TLDs."
+}

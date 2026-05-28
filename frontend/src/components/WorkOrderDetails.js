@@ -4,8 +4,11 @@ import { Button } from '@/components/ui/button';
 import { SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Edit, Download, FileText, Calendar, User, Clipboard, AlertCircle } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { getStatusMeta } from '@/lib/status';
 
 export default function WorkOrderDetails({ workOrder, onClose, onEdit, onDownload }) {
+  const statusMeta = getStatusMeta(workOrder.status);
+
   return (
     <div data-testid="workorder-details">
       <SheetHeader>
@@ -18,20 +21,27 @@ export default function WorkOrderDetails({ workOrder, onClose, onEdit, onDownloa
       </SheetHeader>
 
       <div className="mt-6 space-y-6">
-        {/* OT Number */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-600">
-            <Clipboard className="h-4 w-4" />
-            Número de OT
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-600">
+              <Clipboard className="h-4 w-4" />
+              Número de OT
+            </div>
+            <p className="text-2xl font-mono font-bold text-[#0F62FE]" data-testid="detail-ot-number">
+              {workOrder.ot_number}
+            </p>
           </div>
-          <p className="text-2xl font-mono font-bold text-[#0F62FE]" data-testid="detail-ot-number">
-            {workOrder.ot_number}
-          </p>
+          <span
+            data-testid="detail-status-badge"
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-semibold ${statusMeta.badge}`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} />
+            {statusMeta.label}
+          </span>
         </div>
 
         <Separator />
 
-        {/* Date */}
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-600">
             <Calendar className="h-4 w-4" />
@@ -44,7 +54,6 @@ export default function WorkOrderDetails({ workOrder, onClose, onEdit, onDownloa
 
         <Separator />
 
-        {/* Requestor */}
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-600">
             <User className="h-4 w-4" />
@@ -57,7 +66,6 @@ export default function WorkOrderDetails({ workOrder, onClose, onEdit, onDownloa
 
         <Separator />
 
-        {/* Task Detail */}
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-600">
             <FileText className="h-4 w-4" />
@@ -70,7 +78,6 @@ export default function WorkOrderDetails({ workOrder, onClose, onEdit, onDownloa
 
         <Separator />
 
-        {/* Service Desk Number */}
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-600">
             <AlertCircle className="h-4 w-4" />
@@ -83,7 +90,6 @@ export default function WorkOrderDetails({ workOrder, onClose, onEdit, onDownloa
 
         <Separator />
 
-        {/* Observations */}
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-600">
             <FileText className="h-4 w-4" />
@@ -94,7 +100,6 @@ export default function WorkOrderDetails({ workOrder, onClose, onEdit, onDownloa
           </p>
         </div>
 
-        {/* Attachment */}
         {workOrder.attachment_filename && (
           <>
             <Separator />
@@ -103,7 +108,7 @@ export default function WorkOrderDetails({ workOrder, onClose, onEdit, onDownloa
                 <FileText className="h-4 w-4" />
                 Archivo Adjunto
               </div>
-              <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-sm">
+              <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-md">
                 <span className="text-sm text-slate-700" data-testid="detail-attachment-filename">
                   {workOrder.attachment_filename}
                 </span>
@@ -111,7 +116,7 @@ export default function WorkOrderDetails({ workOrder, onClose, onEdit, onDownloa
                   data-testid="detail-download-attachment-button"
                   size="sm"
                   onClick={() => onDownload(workOrder)}
-                  className="bg-[#0F62FE] hover:bg-[#0043CE] text-white h-8 px-3 rounded-sm"
+                  className="bg-[#0F62FE] hover:bg-[#0043CE] text-white h-8 px-3 rounded-md"
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Descargar
@@ -121,12 +126,11 @@ export default function WorkOrderDetails({ workOrder, onClose, onEdit, onDownloa
           </>
         )}
 
-        {/* Actions */}
         <div className="flex gap-3 pt-4">
           <Button
             data-testid="detail-edit-button"
             onClick={onEdit}
-            className="flex-1 bg-[#0F62FE] hover:bg-[#0043CE] text-white h-10 px-4 rounded-sm font-medium"
+            className="flex-1 bg-gradient-to-r from-[#0F62FE] to-[#0043CE] text-white h-10 px-4 rounded-md font-medium"
           >
             <Edit className="mr-2 h-4 w-4" />
             Editar
@@ -135,7 +139,7 @@ export default function WorkOrderDetails({ workOrder, onClose, onEdit, onDownloa
             data-testid="detail-close-button"
             onClick={onClose}
             variant="outline"
-            className="flex-1 h-10 px-4 rounded-sm font-medium"
+            className="flex-1 h-10 px-4 rounded-md font-medium"
           >
             Cerrar
           </Button>
