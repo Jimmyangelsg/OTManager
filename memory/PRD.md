@@ -1,68 +1,60 @@
 # PRD - Gestión de Órdenes de Trabajo (IBM Maximo) — Multi-usuario
 
 ## Problema Original
-Aplicación personal en español para registrar y gestionar Órdenes de Trabajo (OTs) de IBM Maximo. Cada usuario tiene su propio espacio aislado de OTs. Acceso vía email/contraseña con recuperación por pregunta de seguridad. Pensada para deploy portable (no atada a Emergent).
+Aplicación personal en español para registrar y gestionar Órdenes de Trabajo (OTs) de IBM Maximo. Cada usuario tiene su propio espacio aislado de OTs. Acceso vía email/contraseña con recuperación por pregunta de seguridad. Portable para deploy en cualquier plataforma.
 
 ## Stack
 - Backend: FastAPI + Motor (MongoDB async) + aiofiles + pandas/openpyxl + reportlab + bcrypt + PyJWT
 - Frontend: React Router + Tailwind + shadcn/ui + @hello-pangea/dnd + react-hook-form + zod
 - DB: MongoDB
 
-## Auth (JWT portable, sin Emergent lock-in)
-- bcrypt para hash de password y de respuesta de pregunta de seguridad (normalizada lowercase+trim)
-- JWT access (24h) + refresh (30d) en cookies httpOnly Secure SameSite=None
-- Brute-force lockout: 5 fallos consecutivos → 15min bloqueado (HTTP 429)
-- Admin seed automático al startup (`ADMIN_EMAIL`/`ADMIN_PASSWORD` en `.env`)
-
 ## Implementado
-- **2026-03**: CRUD básico, búsqueda, filtros, adjuntos, exportación Excel.
-- **2026-05-28 (auth + features)**: 
-  - JWT auth completo: register, login, logout, /me, refresh, forgot-password, reset-password
-  - Recuperación por pregunta de seguridad (5 plantillas + custom)
-  - Aislamiento total: OTs scopedas por user_id (404 al cross-access)
-  - Drag-and-drop con `@hello-pangea/dnd` + endpoint `POST /api/workorders/reorder` (scopeado por usuario)
-  - Estados de OT: pending / in_progress / completed con badges de color
-  - Filtro por estado en el panel de filtros
-  - Exportación a PDF (reportlab, A4 horizontal con tabla coloreada)
-  - Exportación a Excel con columna Estado (respeta filtros + orden manual)
-  - Paginación servidor: `GET /api/workorders?page=N&page_size=20` con envelope `{items,total,page,total_pages}`
-  - User menu (avatar con inicial) + logout
-  - Diseño renovado: header con gradiente azul, badges de estado, layout en cards con drag handle e índice global
-  - AlertDialog confirmación al eliminar (reemplaza window.confirm)
-- **Testing**: 29/29 pytest backend, frontend e2e validado.
+- **2026-03 / 2026-05-28 (iters 1-4)**: CRUD OTs, búsqueda/filtros, adjuntos, Excel/PDF, reorder drag-and-drop, estados con badges, JWT auth con recuperación por pregunta de seguridad, aislamiento por usuario, paginación servidor.
+- **2026-05-28 (iter 5 - P2 + sugerencias)**:
+  - **Stats cards**: Total / Pendientes / En curso / Completadas en dashboard
+  - **Atajos de teclado**: `N` nueva OT, `/` o `Ctrl+K` buscar, `Esc` cerrar, `?` ayuda; suprimidos cuando hay un input enfocado
+  - **Página /profile**: cambiar nombre, contraseña (con verificación de actual), pregunta de seguridad
+  - **Validación de upload** (server + cliente): max 10MB, extensión + mime allowlist (pdf, imágenes, Office, txt/csv/zip), feedback de tamaño con `formatBytes`
+  - **Rol admin** con visibilidad cross-user: toggle "Vista global / Vista personal", owner mostrado en cada OT, edit/delete y reorder ocultos en vista global
+
+## Auth (JWT portable)
+- bcrypt + JWT access (24h) + refresh (30d) en cookies httpOnly Secure SameSite=None
+- Brute-force lockout: 5 fallos consecutivos → 15min bloqueado
+- Admin seed automático (`ADMIN_EMAIL`/`ADMIN_PASSWORD`)
 
 ## API
 ### Auth `/api/auth`
-- POST `/register`  `{email, password, name, security_question:{question, answer}}`
-- POST `/login`     `{email, password}` → cookies httpOnly + JSON con access_token
-- POST `/logout`
+- POST `/register`, `/login`, `/logout`, `/refresh`
 - GET  `/me`
-- POST `/refresh`
-- POST `/forgot-password`  `{email}` → `{question}`
-- POST `/reset-password`   `{email, security_answer, new_password}`
+- POST `/forgot-password`, `/reset-password`
+- PUT  `/profile`               body: `{name}`
+- POST `/change-password`       body: `{current_password, new_password}`
+- PUT  `/security-question`     body: `{current_password, question, answer}`
 
-### Work Orders `/api/workorders` (auth required, scoped por user_id)
-- GET `/` (?search, ?requestor, ?status, ?date_from, ?date_to, ?page, ?page_size) → envelope paginado
+### Work Orders `/api/workorders` (auth required)
+- GET `/` (search, requestor, status, date_from, date_to, page, page_size, all_users[admin])
+- GET `/stats` (?all_users=true para admin) → `{pending,in_progress,completed,total,with_attachment}`
 - POST `/`, GET `/{id}`, PUT `/{id}`, DELETE `/{id}`
-- POST `/reorder` `{ordered_ids:[...]}`
-- POST `/{id}/upload`, GET `/{id}/attachment`
+- POST `/reorder`, POST `/{id}/upload`, GET `/{id}/attachment`
 - GET `/export/excel`, GET `/export/pdf`
 
-## Schemas
-```
-users: { id, email (unique), password_hash, name, role,
-         created_at, security_question:{question, answer_hash} }
-workorders: { id, user_id, ot_number, created_at, status,
-              requestor, task_detail, service_desk_number,
-              observations, attachment_filename, attachment_url,
-              _stored_filename, sort_order }
-login_attempts: { identifier (ip:email), count, locked_until }
-```
+## Validación de upload
+- Max: 10 MB
+- Extensiones: .pdf .png .jpg .jpeg .gif .webp .xlsx .docx .xls .doc .txt .csv .zip
+- Mime types validados además de extensión (allow octet-stream si la extensión está OK)
+- Chunked upload (1MB) para no cargar archivos grandes en RAM
+- Borra el archivo anterior del disco al reemplazar
+
+## Testing
+- 44/44 pytest backend
+- Frontend e2e: 100% en todos los flujos
+- Suites:
+  - `/app/backend/tests/test_auth_and_workorders.py` (29 tests)
+  - `/app/backend/tests/test_new_features_iter5.py` (15 tests)
 
 ## Backlog
-- P1: Login con Google (requiere que el usuario provea su Google OAuth client_id para mantener portabilidad)
-- P2: Compartir/exportar OTs entre usuarios (rol admin con visibilidad cross-user)
-- P2: Validación de tipo/tamaño de archivo en upload (max 10MB, mime allowlist)
-- P2: Página de perfil para que el usuario pueda cambiar contraseña / pregunta de seguridad
-- P3: Refactor server.py en routers (auth/, workorders/, exports/)
-- P3: Cambiar EmailStr a un validator custom para aceptar TLDs reservadas (.test/.localhost) o documentar el comportamiento
+- P2: Login con Google portable (descartado por usuario por ahora)
+- P3: Refactor server.py en routers separados (auth/, workorders/, exports/, profile/)
+- P3: Aceptar TLDs reservadas (.test/.localhost) en EmailStr para entornos de testing
+- P3: Sincronizar la pagination cuando el toggle admin cambia los filtros
+- P3: Vista de detalle de OT cross-user en modo admin (mostrar owner en el sheet)
