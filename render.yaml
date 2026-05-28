@@ -1,0 +1,53 @@
+# Render.com blueprint - one-click deploy for backend + frontend + MongoDB.
+# Usage: in Render dashboard → "New +" → "Blueprint" → connect your GitHub repo.
+# After deploy: update REACT_APP_BACKEND_URL in the static site env vars
+# with the live URL of the backend web service, then trigger a redeploy.
+
+services:
+  # ---------- Backend (FastAPI) ----------
+  - type: web
+    name: ots-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/
+    autoDeploy: true
+    envVars:
+      - key: MONGO_URL
+        sync: false       # Set this to your MongoDB Atlas connection string in the Render UI
+      - key: DB_NAME
+        value: ots_db
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        value: admin@local.dev
+      - key: ADMIN_PASSWORD
+        sync: false       # Pick a strong password in the Render UI
+      - key: CORS_ORIGINS
+        sync: false       # Set to your frontend URL (https://ots-frontend.onrender.com)
+      - key: PYTHON_VERSION
+        value: 3.11.9
+
+  # ---------- Frontend (static site built from React) ----------
+  - type: web
+    name: ots-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: yarn install --frozen-lockfile && yarn build
+    staticPublishPath: ./build
+    autoDeploy: true
+    pullRequestPreviewsEnabled: true
+    envVars:
+      - key: REACT_APP_BACKEND_URL
+        sync: false       # Set to https://ots-backend.onrender.com after backend is up
+      - key: NODE_VERSION
+        value: "20"
+      - key: CI
+        value: "true"
+    # SPA fallback so React Router routes work on hard refresh
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
