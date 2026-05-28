@@ -1,0 +1,17 @@
+{
+  "short_name": "OTs Maximo",
+  "name": "Órdenes de Trabajo · IBM Maximo",
+  "description": "Gestor personal de Órdenes de Trabajo (OTs) IBM Maximo.",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0F62FE",
+  "background_color": "#ffffff",
+  "lang": "es"
+}

@@ -1,7 +1,7 @@
 # PRD - Gestión de Órdenes de Trabajo (IBM Maximo) — Multi-usuario
 
 ## Problema Original
-Aplicación personal en español para registrar y gestionar Órdenes de Trabajo (OTs) de IBM Maximo. Cada usuario tiene su propio espacio aislado de OTs. Acceso vía email/contraseña con recuperación por pregunta de seguridad. Portable para deploy en cualquier plataforma.
+Aplicación personal en español para registrar y gestionar Órdenes de Trabajo (OTs) de IBM Maximo. Cada usuario tiene su propio espacio aislado de OTs. Acceso vía email/contraseña con recuperación por pregunta de seguridad. **Portable** — pensada para deploy en GitHub + Vercel/Render/Railway/Netlify, sin lock-in.
 
 ## Stack
 - Backend: FastAPI + Motor (MongoDB async) + aiofiles + pandas/openpyxl + reportlab + bcrypt + PyJWT
@@ -9,52 +9,60 @@ Aplicación personal en español para registrar y gestionar Órdenes de Trabajo 
 - DB: MongoDB
 
 ## Implementado
-- **2026-03 / 2026-05-28 (iters 1-4)**: CRUD OTs, búsqueda/filtros, adjuntos, Excel/PDF, reorder drag-and-drop, estados con badges, JWT auth con recuperación por pregunta de seguridad, aislamiento por usuario, paginación servidor.
-- **2026-05-28 (iter 5 - P2 + sugerencias)**:
-  - **Stats cards**: Total / Pendientes / En curso / Completadas en dashboard
-  - **Atajos de teclado**: `N` nueva OT, `/` o `Ctrl+K` buscar, `Esc` cerrar, `?` ayuda; suprimidos cuando hay un input enfocado
-  - **Página /profile**: cambiar nombre, contraseña (con verificación de actual), pregunta de seguridad
-  - **Validación de upload** (server + cliente): max 10MB, extensión + mime allowlist (pdf, imágenes, Office, txt/csv/zip), feedback de tamaño con `formatBytes`
-  - **Rol admin** con visibilidad cross-user: toggle "Vista global / Vista personal", owner mostrado en cada OT, edit/delete y reorder ocultos en vista global
+- **2026-03/05 (iters 1-5)**: CRUD, búsqueda/filtros, adjuntos, Excel/PDF, reorder drag-and-drop, estados, JWT auth multi-usuario, recuperación por pregunta de seguridad, paginación, stats, atajos de teclado, página de perfil, rol admin con vista global.
+- **2026-05-28 (iter 6 - code quality + deploy ready)**:
+  - Memoización completa de Dashboard (useCallback en todos los handlers, useMemo en value/shortcuts/accents)
+  - Extracción de `useKeyboardShortcuts` hook y constantes `STAT_ACCENTS` / `SHORTCUT_HELP_ROWS`
+  - AuthContext: login/logout/register en useCallback, value en useMemo, logout con error log dev-guarded
+  - ProtectedRoute: navState en useMemo
+  - console.error/warn protegidos por `process.env.NODE_ENV === 'development'`
+  - Keys estables (no usa índices) en mapas
+- **2026-05-28 (iter 7 - GitHub deploy ready)**:
+  - `public/index.html` limpio: removido emergent badge, emergent main script, PostHog tracking; título y descripción propios; idioma "es"
+  - Agregados `public/favicon.svg`, `public/manifest.json`, `public/robots.txt`
+  - Removido `emergentintegrations` de `requirements.txt` (no usado)
+  - Removido `@emergentbase/visual-edits` de `package.json` (CDN privado)
+  - Creados `backend/.env.example` y `frontend/.env.example`
+  - `README.md` reescrito con guía completa de deploy (Render/Railway/Vercel/Netlify)
+  - `.github/workflows/ci.yml` agregado (pytest + frontend build en PRs/push)
+  - Build de producción verificado limpio (sin referencias a emergent.sh)
 
 ## Auth (JWT portable)
 - bcrypt + JWT access (24h) + refresh (30d) en cookies httpOnly Secure SameSite=None
-- Brute-force lockout: 5 fallos consecutivos → 15min bloqueado
-- Admin seed automático (`ADMIN_EMAIL`/`ADMIN_PASSWORD`)
+- Brute-force lockout: 5 fallos consecutivos → 15min (HTTP 429)
+- Admin seed automático (`ADMIN_EMAIL`/`ADMIN_PASSWORD` en `.env`)
 
 ## API
 ### Auth `/api/auth`
 - POST `/register`, `/login`, `/logout`, `/refresh`
-- GET  `/me`
+- GET `/me`
 - POST `/forgot-password`, `/reset-password`
-- PUT  `/profile`               body: `{name}`
-- POST `/change-password`       body: `{current_password, new_password}`
-- PUT  `/security-question`     body: `{current_password, question, answer}`
+- PUT `/profile`, POST `/change-password`, PUT `/security-question`
 
-### Work Orders `/api/workorders` (auth required)
-- GET `/` (search, requestor, status, date_from, date_to, page, page_size, all_users[admin])
-- GET `/stats` (?all_users=true para admin) → `{pending,in_progress,completed,total,with_attachment}`
-- POST `/`, GET `/{id}`, PUT `/{id}`, DELETE `/{id}`
+### Work Orders `/api/workorders` (auth required, scoped by user_id)
+- GET `/`, `/stats`, `/{id}`
+- POST `/`, PUT `/{id}`, DELETE `/{id}`
 - POST `/reorder`, POST `/{id}/upload`, GET `/{id}/attachment`
 - GET `/export/excel`, GET `/export/pdf`
 
-## Validación de upload
-- Max: 10 MB
-- Extensiones: .pdf .png .jpg .jpeg .gif .webp .xlsx .docx .xls .doc .txt .csv .zip
-- Mime types validados además de extensión (allow octet-stream si la extensión está OK)
-- Chunked upload (1MB) para no cargar archivos grandes en RAM
-- Borra el archivo anterior del disco al reemplazar
+## Schemas
+- users: `{id, email(unique), password_hash, name, role, created_at, security_question:{question, answer_hash}}`
+- workorders: `{id, user_id, ot_number, created_at, status, requestor, task_detail, service_desk_number, observations, attachment_filename, attachment_url, _stored_filename, sort_order}`
+- login_attempts: `{identifier(ip:email), count, locked_until}`
 
 ## Testing
-- 44/44 pytest backend
-- Frontend e2e: 100% en todos los flujos
-- Suites:
-  - `/app/backend/tests/test_auth_and_workorders.py` (29 tests)
-  - `/app/backend/tests/test_new_features_iter5.py` (15 tests)
+- Backend: 44/44 pytest passing
+- Frontend: e2e validado en todos los flujos críticos
 
-## Backlog
-- P2: Login con Google portable (descartado por usuario por ahora)
-- P3: Refactor server.py en routers separados (auth/, workorders/, exports/, profile/)
-- P3: Aceptar TLDs reservadas (.test/.localhost) en EmailStr para entornos de testing
-- P3: Sincronizar la pagination cuando el toggle admin cambia los filtros
-- P3: Vista de detalle de OT cross-user en modo admin (mostrar owner en el sheet)
+## Validación de upload (cliente + servidor)
+- Max 10 MB · Allowlist: .pdf .png .jpg .jpeg .gif .webp .xlsx .docx .xls .doc .txt .csv .zip
+- Mime type validado además de extensión
+- Chunked upload (1MB) sin cargar archivos grandes en RAM
+- Borrado del archivo anterior al reemplazar
+
+## Backlog (P3)
+- Mostrar owner en sheet de detalles cuando está en vista global admin
+- Refactor server.py en routers separados
+- Dockerfile + docker-compose para self-hosted con un solo comando
+- Login con Google portable (descartado por el usuario)
+- Validator custom de email para aceptar TLDs reservadas (.test/.localhost)
