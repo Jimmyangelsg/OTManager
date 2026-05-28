@@ -276,8 +276,8 @@ async def export_to_excel(
         if date_query:
             query['created_at'] = date_query
     
-    # Get workorders
-    workorders = await db.workorders.find(query, {"_id": 0, "_stored_filename": 0}).sort('created_at', -1).to_list(1000)
+    # Get workorders - match the list view order (sort_order DESC, then created_at DESC)
+    workorders = await db.workorders.find(query, {"_id": 0, "_stored_filename": 0}).sort([('sort_order', -1), ('created_at', -1)]).to_list(1000)
     
     if not workorders:
         raise HTTPException(status_code=404, detail="No work orders found to export")
