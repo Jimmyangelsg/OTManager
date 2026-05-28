@@ -61,7 +61,7 @@ export default function CreateWorkOrderForm({ onSuccess }) {
       toast.success('Orden de trabajo creada');
       onSuccess();
     } catch (error) {
-      console.error('Error creating work order:', error);
+      if (process.env.NODE_ENV === 'development') console.error('Error creating work order:', error);
       const msg = formatApiErrorDetail(error.response?.data?.detail) || 'Error al crear la OT';
       toast.error(msg);
     } finally {

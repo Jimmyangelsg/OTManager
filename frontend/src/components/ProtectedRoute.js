@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { ListChecks } from 'lucide-react';
@@ -5,6 +6,8 @@ import { ListChecks } from 'lucide-react';
 export default function ProtectedRoute({ children }) {
   const { user } = useAuth();
   const location = useLocation();
+
+  const navState = useMemo(() => ({ from: location }), [location]);
 
   if (user === null) {
     return (
@@ -20,7 +23,7 @@ export default function ProtectedRoute({ children }) {
   }
 
   if (user === false) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to="/login" state={navState} replace />;
   }
 
   return children;

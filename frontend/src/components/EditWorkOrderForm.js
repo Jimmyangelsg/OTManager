@@ -55,7 +55,7 @@ export default function EditWorkOrderForm({ workOrder, onSuccess }) {
       toast.success('OT actualizada');
       onSuccess();
     } catch (error) {
-      console.error('Error updating work order:', error);
+      if (process.env.NODE_ENV === 'development') console.error('Error updating work order:', error);
       const msg = formatApiErrorDetail(error.response?.data?.detail) || 'Error al actualizar';
       toast.error(msg);
     } finally {

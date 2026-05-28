@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -29,11 +29,14 @@ import WorkOrderDetails from '@/components/WorkOrderDetails';
 import EditWorkOrderForm from '@/components/EditWorkOrderForm';
 import { format, isToday, isYesterday } from 'date-fns';
 import { es } from 'date-fns/locale';
-import api, { formatApiErrorDetail } from '@/lib/api';
+import api from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { STATUS_OPTIONS, getStatusMeta } from '@/lib/status';
+import { STAT_ACCENTS, SHORTCUT_HELP_ROWS } from '@/lib/dashboardConstants';
+import useKeyboardShortcuts from '@/hooks/useKeyboardShortcuts';
 
 const PAGE_SIZE = 20;
+const isDev = process.env.NODE_ENV === 'development';
 
 function formatDateLabel(date) {
   const d = new Date(date);
@@ -87,6 +90,15 @@ export default function Dashboard() {
   const searchInputRef = useRef(null);
   const isAdmin = user?.role === 'admin';
 
+  const buildQueryParams = useCallback(() => {
+    const params = new URLSearchParams();
+    if (searchTerm) params.append('search', searchTerm);
+    if (filterRequestor) params.append('requestor', filterRequestor);
+    if (filterStatus && filterStatus !== 'all') params.append('status', filterStatus);
+    if (isAdmin && adminViewMode) params.append('all_users', 'true');
+    return params;
+  }, [searchTerm, filterRequestor, filterStatus, isAdmin, adminViewMode]);
+
   const fetchStats = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -94,18 +106,14 @@ export default function Dashboard() {
       const { data } = await api.get(`/workorders/stats?${params.toString()}`);
       setStats(data);
     } catch (err) {
-      console.warn('Stats fetch failed', err);
+      if (isDev) console.warn('[Dashboard] stats fetch failed', err);
     }
   }, [isAdmin, adminViewMode]);
 
   const fetchWorkOrders = useCallback(async (overridePage) => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (searchTerm) params.append('search', searchTerm);
-      if (filterRequestor) params.append('requestor', filterRequestor);
-      if (filterStatus && filterStatus !== 'all') params.append('status', filterStatus);
-      if (isAdmin && adminViewMode) params.append('all_users', 'true');
+      const params = buildQueryParams();
       params.append('page', overridePage ?? page);
       params.append('page_size', PAGE_SIZE);
 
@@ -115,13 +123,12 @@ export default function Dashboard() {
       setTotalPages(data.total_pages ?? 0);
       if (overridePage) setPage(overridePage);
     } catch (error) {
-      console.error('Error fetching work orders:', error);
+      if (isDev) console.error('[Dashboard] error fetching work orders:', error);
       toast.error('Error al cargar las órdenes de trabajo');
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, searchTerm, filterRequestor, filterStatus, isAdmin, adminViewMode]);
+  }, [page, buildQueryParams]);
 
   useEffect(() => {
     fetchWorkOrders();
@@ -129,61 +136,61 @@ export default function Dashboard() {
   }, [fetchWorkOrders, fetchStats]);
 
   // --- Keyboard shortcuts ---
-  useEffect(() => {
-    const handler = (e) => {
-      // Skip shortcuts if user is typing in any input/textarea or sheet/dialog is open
-      const target = e.target;
-      const isTyping = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
-      const anySheetOpen = isCreateOpen || isDetailsOpen || isEditOpen || Boolean(pendingDelete);
+  const focusSearch = useCallback(() => searchInputRef.current?.focus(), []);
+  const openCreate = useCallback(() => setIsCreateOpen(true), []);
+  const toggleShortcutsHelp = useCallback(() => setShowShortcuts((s) => !s), []);
 
-      if (e.key === 'Escape') {
-        if (isCreateOpen) setIsCreateOpen(false);
-        if (isDetailsOpen) setIsDetailsOpen(false);
-        if (isEditOpen) setIsEditOpen(false);
-        if (pendingDelete) setPendingDelete(null);
-        if (showShortcuts) setShowShortcuts(false);
-        return;
-      }
+  const closeAllOverlays = useCallback(() => {
+    setIsCreateOpen(false);
+    setIsDetailsOpen(false);
+    setIsEditOpen(false);
+    setPendingDelete(null);
+    setShowShortcuts(false);
+  }, []);
 
-      if (isTyping || anySheetOpen) return;
+  const anyOverlayOpen = isCreateOpen || isDetailsOpen || isEditOpen || Boolean(pendingDelete) || showShortcuts;
 
-      if (e.key === '/' || (e.key === 'k' && (e.metaKey || e.ctrlKey))) {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-      } else if (e.key === 'n' || e.key === 'N') {
-        e.preventDefault();
-        setIsCreateOpen(true);
-      } else if (e.key === '?') {
-        e.preventDefault();
-        setShowShortcuts((s) => !s);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [isCreateOpen, isDetailsOpen, isEditOpen, pendingDelete, showShortcuts]);
+  const shortcutHandlers = useMemo(
+    () => [
+      { key: '/', handler: focusSearch },
+      { key: 'k', ctrlOrMeta: true, handler: focusSearch },
+      { key: 'n', handler: openCreate },
+      { key: '?', handler: toggleShortcutsHelp },
+      { key: 'escape', handler: closeAllOverlays },
+    ],
+    [focusSearch, openCreate, toggleShortcutsHelp, closeAllOverlays]
+  );
 
-  const handleSearch = () => {
+  // Disable "open" shortcuts (N, /, ?) when any overlay is already open,
+  // but keep Esc working to close them.
+  const enabledShortcuts = useMemo(
+    () => (anyOverlayOpen ? shortcutHandlers.filter((s) => s.key === 'escape') : shortcutHandlers),
+    [anyOverlayOpen, shortcutHandlers]
+  );
+  useKeyboardShortcuts(enabledShortcuts);
+
+  const handleSearch = useCallback(() => {
     setPage(1);
     fetchWorkOrders(1);
-  };
+  }, [fetchWorkOrders]);
 
-  const handleClearFilters = () => {
+  const handleClearFilters = useCallback(() => {
     setSearchTerm('');
     setFilterRequestor('');
     setFilterStatus('all');
     setPage(1);
     setTimeout(() => fetchWorkOrders(1), 50);
-  };
+  }, [fetchWorkOrders]);
 
   const refreshAll = useCallback(() => {
     fetchWorkOrders();
     fetchStats();
   }, [fetchWorkOrders, fetchStats]);
 
-  const handleViewDetails = (wo) => { setSelectedWorkOrder(wo); setIsDetailsOpen(true); };
-  const handleEdit = (wo) => { setSelectedWorkOrder(wo); setIsEditOpen(true); };
+  const handleViewDetails = useCallback((wo) => { setSelectedWorkOrder(wo); setIsDetailsOpen(true); }, []);
+  const handleEdit = useCallback((wo) => { setSelectedWorkOrder(wo); setIsEditOpen(true); }, []);
 
-  const confirmDelete = async () => {
+  const confirmDelete = useCallback(async () => {
     if (!pendingDelete) return;
     try {
       await api.delete(`/workorders/${pendingDelete.id}`);
@@ -191,12 +198,12 @@ export default function Dashboard() {
       setPendingDelete(null);
       refreshAll();
     } catch (error) {
-      console.error('Error deleting:', error);
+      if (isDev) console.error('[Dashboard] error deleting:', error);
       toast.error('Error al eliminar la OT');
     }
-  };
+  }, [pendingDelete, refreshAll]);
 
-  const handleDownloadAttachment = async (wo) => {
+  const handleDownloadAttachment = useCallback(async (wo) => {
     try {
       const response = await api.get(`/workorders/${wo.id}/attachment`, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -208,12 +215,13 @@ export default function Dashboard() {
       link.remove();
       window.URL.revokeObjectURL(url);
       toast.success('Archivo descargado');
-    } catch {
+    } catch (err) {
+      if (isDev) console.warn('[Dashboard] download error', err);
       toast.error('Error al descargar el archivo');
     }
-  };
+  }, []);
 
-  const downloadExport = async (kind) => {
+  const downloadExport = useCallback(async (kind) => {
     try {
       const params = new URLSearchParams();
       if (searchTerm) params.append('search', searchTerm);
@@ -238,9 +246,9 @@ export default function Dashboard() {
         toast.error(`Error al exportar a ${kind.toUpperCase()}`);
       }
     }
-  };
+  }, [searchTerm, filterRequestor, filterStatus]);
 
-  const onDragEnd = async (result) => {
+  const onDragEnd = useCallback(async (result) => {
     if (!result.destination || result.destination.index === result.source.index) return;
     if (adminViewMode) {
       toast.info('No podés reordenar en vista global de admin.');
@@ -253,15 +261,32 @@ export default function Dashboard() {
     try {
       await api.post('/workorders/reorder', { ordered_ids: reordered.map((wo) => wo.id) });
       toast.success('Orden actualizado');
-    } catch {
+    } catch (err) {
+      if (isDev) console.warn('[Dashboard] reorder error', err);
       toast.error('No se pudo guardar el nuevo orden');
       fetchWorkOrders();
     }
-  };
+  }, [adminViewMode, workOrders, fetchWorkOrders]);
+
+  const handleAdminToggle = useCallback(() => {
+    setAdminViewMode((v) => !v);
+    setPage(1);
+  }, []);
+
+  const openDetailsToEdit = useCallback(() => {
+    setIsDetailsOpen(false);
+    setIsEditOpen(true);
+  }, []);
+
+  const closeDetails = useCallback(() => setIsDetailsOpen(false), []);
+
+  const cancelDelete = useCallback(() => setPendingDelete(null), []);
+  const handlePendingDeleteOpenChange = useCallback((open) => { if (!open) setPendingDelete(null); }, []);
 
   const isFiltered = Boolean(searchTerm || filterRequestor || (filterStatus && filterStatus !== 'all'));
   const userName = user?.name || user?.email || '';
   const userInitial = (user?.name || user?.email || '?').charAt(0).toUpperCase();
+  const filterBadgeCount = (filterRequestor ? 1 : 0) + (filterStatus !== 'all' ? 1 : 0);
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
@@ -293,7 +318,7 @@ export default function Dashboard() {
                 <Button
                   data-testid="admin-toggle-button"
                   variant={adminViewMode ? 'default' : 'outline'}
-                  onClick={() => { setAdminViewMode((v) => !v); setPage(1); }}
+                  onClick={handleAdminToggle}
                   className={`h-10 px-3 rounded-md font-medium text-xs ${adminViewMode ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'border-purple-300 text-purple-700 hover:bg-purple-50'}`}
                   title="Alternar vista global (todos los usuarios)"
                 >
@@ -412,9 +437,9 @@ export default function Dashboard() {
               >
                 <Filter className="h-4 w-4 mr-2" />
                 Filtros
-                {(filterRequestor ? 1 : 0) + (filterStatus !== 'all' ? 1 : 0) > 0 && (
+                {filterBadgeCount > 0 && (
                   <span className="ml-2 inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-blue-600 text-white text-[10px] font-bold">
-                    {(filterRequestor ? 1 : 0) + (filterStatus !== 'all' ? 1 : 0)}
+                    {filterBadgeCount}
                   </span>
                 )}
               </Button>
@@ -466,34 +491,10 @@ export default function Dashboard() {
       <main className="flex-1 px-6 py-6 max-w-[1600px] mx-auto w-full">
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6" data-testid="stats-grid">
-          <StatCard
-            icon={Inbox}
-            label="Total"
-            value={stats.total}
-            accent={{ border: 'border-slate-200', bg: 'bg-slate-100', text: 'text-slate-600' }}
-            dataTestId="stat-card-total"
-          />
-          <StatCard
-            icon={Clock}
-            label="Pendientes"
-            value={stats.pending}
-            accent={{ border: 'border-amber-100', bg: 'bg-amber-50', text: 'text-amber-700' }}
-            dataTestId="stat-card-pending"
-          />
-          <StatCard
-            icon={Loader2}
-            label="En curso"
-            value={stats.in_progress}
-            accent={{ border: 'border-blue-100', bg: 'bg-blue-50', text: 'text-blue-700' }}
-            dataTestId="stat-card-in-progress"
-          />
-          <StatCard
-            icon={CheckCircle2}
-            label="Completadas"
-            value={stats.completed}
-            accent={{ border: 'border-emerald-100', bg: 'bg-emerald-50', text: 'text-emerald-700' }}
-            dataTestId="stat-card-completed"
-          />
+          <StatCard icon={Inbox} label="Total" value={stats.total} accent={STAT_ACCENTS.total} dataTestId="stat-card-total" />
+          <StatCard icon={Clock} label="Pendientes" value={stats.pending} accent={STAT_ACCENTS.pending} dataTestId="stat-card-pending" />
+          <StatCard icon={Loader2} label="En curso" value={stats.in_progress} accent={STAT_ACCENTS.in_progress} dataTestId="stat-card-in-progress" />
+          <StatCard icon={CheckCircle2} label="Completadas" value={stats.completed} accent={STAT_ACCENTS.completed} dataTestId="stat-card-completed" />
         </div>
 
         {loading ? (
@@ -519,7 +520,7 @@ export default function Dashboard() {
                 <X className="mr-2 h-4 w-4" /> Limpiar filtros
               </Button>
             ) : (
-              <Button onClick={() => setIsCreateOpen(true)} className="bg-gradient-to-r from-[#0F62FE] to-[#0043CE] text-white rounded-md shadow-md">
+              <Button onClick={openCreate} className="bg-gradient-to-r from-[#0F62FE] to-[#0043CE] text-white rounded-md shadow-md">
                 <Plus className="mr-2 h-4 w-4" /> Crear Primera OT
               </Button>
             )}
@@ -680,8 +681,8 @@ export default function Dashboard() {
           {selectedWorkOrder && (
             <WorkOrderDetails
               workOrder={selectedWorkOrder}
-              onClose={() => setIsDetailsOpen(false)}
-              onEdit={adminViewMode ? null : () => { setIsDetailsOpen(false); setIsEditOpen(true); }}
+              onClose={closeDetails}
+              onEdit={adminViewMode ? null : openDetailsToEdit}
               onDownload={handleDownloadAttachment}
             />
           )}
@@ -709,7 +710,7 @@ export default function Dashboard() {
       </Sheet>
 
       {/* Delete confirmation */}
-      <AlertDialog open={Boolean(pendingDelete)} onOpenChange={(open) => !open && setPendingDelete(null)}>
+      <AlertDialog open={Boolean(pendingDelete)} onOpenChange={handlePendingDeleteOpenChange}>
         <AlertDialogContent data-testid="delete-confirm-dialog">
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar esta OT?</AlertDialogTitle>
@@ -724,7 +725,7 @@ export default function Dashboard() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid="cancel-delete-button">Cancelar</AlertDialogCancel>
+            <AlertDialogCancel data-testid="cancel-delete-button" onClick={cancelDelete}>Cancelar</AlertDialogCancel>
             <AlertDialogAction data-testid="confirm-delete-button" onClick={confirmDelete} className="bg-red-600 hover:bg-red-700 text-white">
               Sí, eliminar
             </AlertDialogAction>
@@ -745,18 +746,12 @@ export default function Dashboard() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-2 py-2">
-            {[
-              { keys: ['N'], desc: 'Crear nueva OT' },
-              { keys: ['/'], desc: 'Foco en el buscador' },
-              { keys: ['Ctrl', 'K'], desc: 'Foco en el buscador (alternativo)' },
-              { keys: ['Esc'], desc: 'Cerrar panel/ventana abierta' },
-              { keys: ['?'], desc: 'Mostrar/ocultar esta ayuda' },
-            ].map((row) => (
-              <div key={row.desc} className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-0">
+            {SHORTCUT_HELP_ROWS.map((row) => (
+              <div key={row.id} className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-0">
                 <span className="text-sm text-slate-700">{row.desc}</span>
                 <div className="flex gap-1">
-                  {row.keys.map((k, i) => (
-                    <kbd key={i} className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded text-xs font-mono font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                  {row.keys.map((k) => (
+                    <kbd key={`${row.id}-${k}`} className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded text-xs font-mono font-bold bg-slate-100 text-slate-700 border border-slate-300">
                       {k}
                     </kbd>
                   ))}
