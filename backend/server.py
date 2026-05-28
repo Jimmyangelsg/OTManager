@@ -94,6 +94,48 @@ async def root():
     return {"message": "Work Order Management API"}
 
 
+# ---------- Upload validation ----------
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+ALLOWED_MIME_TYPES = {
+    "application/pdf",
+    "image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # xlsx
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # docx
+    "application/vnd.ms-excel",  # xls
+    "application/msword",  # doc
+    "text/plain",
+    "text/csv",
+    "application/zip",
+}
+ALLOWED_EXTENSIONS = {
+    ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp",
+    ".xlsx", ".docx", ".xls", ".doc", ".txt", ".csv", ".zip",
+}
+
+
+@api_router.get("/workorders/stats")
+async def get_workorder_stats(
+    user: dict = Depends(get_current_user),
+    all_users: bool = False,
+):
+    """Counts by status + total. Admin can opt-in to global counts with ?all_users=true."""
+    is_admin_global = bool(all_users) and user.get("role") == "admin"
+    query = {} if is_admin_global else {"user_id": user["id"]}
+    pipeline = [
+        {"$match": query},
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}}
+    ]
+    by_status = {"pending": 0, "in_progress": 0, "completed": 0}
+    total = 0
+    async for row in db.workorders.aggregate(pipeline):
+        key = row.get("_id") or "pending"
+        if key in by_status:
+            by_status[key] = row["count"]
+        total += row["count"]
+    with_attachment = await db.workorders.count_documents({**query, "attachment_filename": {"$nin": [None, ""]}})
+    return {**by_status, "total": total, "with_attachment": with_attachment}
+
+
 @api_router.post("/workorders", response_model=WorkOrder)
 async def create_workorder(input: WorkOrderCreate, user: dict = Depends(get_current_user)):
     _validate_status(input.status)
@@ -126,13 +168,16 @@ async def get_workorders(
     date_to: Optional[str] = None,
     page: int = 1,
     page_size: int = 20,
+    all_users: bool = False,
 ):
     if page < 1:
         page = 1
     if page_size < 1 or page_size > 200:
         page_size = 20
 
-    query = {"user_id": user["id"]}
+    # Admin can view cross-user OTs by passing ?all_users=true
+    is_admin_global = bool(all_users) and user.get("role") == "admin"
+    query = {} if is_admin_global else {"user_id": user["id"]}
 
     if search:
         query['ot_number'] = {'$regex': search, '$options': 'i'}
@@ -161,6 +206,15 @@ async def get_workorders(
         .to_list(page_size)
     )
 
+    # If admin global view, attach owner name/email to each row
+    if is_admin_global and workorders:
+        owner_ids = list({wo.get('user_id') for wo in workorders if wo.get('user_id')})
+        owners = {}
+        async for u in db.users.find({"id": {"$in": owner_ids}}, {"_id": 0, "id": 1, "name": 1, "email": 1}):
+            owners[u["id"]] = {"name": u.get("name", ""), "email": u.get("email", "")}
+        for wo in workorders:
+            wo['owner'] = owners.get(wo.get('user_id'), {"name": "(desconocido)", "email": ""})
+
     for wo in workorders:
         if isinstance(wo.get('created_at'), str):
             wo['created_at'] = datetime.fromisoformat(wo['created_at'])
@@ -173,6 +227,7 @@ async def get_workorders(
         "page_size": page_size,
         "total": total,
         "total_pages": (total + page_size - 1) // page_size if page_size else 0,
+        "admin_view": is_admin_global,
     }
 
 
@@ -251,13 +306,57 @@ async def upload_attachment(workorder_id: str, file: UploadFile = File(...), use
     if not workorder:
         raise HTTPException(status_code=404, detail="Work order not found")
 
-    file_extension = Path(file.filename).suffix
+    # --- Validation: extension + mime type ---
+    file_extension = Path(file.filename or "").suffix.lower()
+    if file_extension not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tipo de archivo no permitido. Aceptados: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+        )
+    if file.content_type and file.content_type not in ALLOWED_MIME_TYPES:
+        # Some clients send octet-stream for legitimate files; allow if extension is OK
+        if file.content_type != "application/octet-stream":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Mime type '{file.content_type}' no permitido."
+            )
+
+    # --- Read in chunks to enforce size limit without loading huge files into RAM ---
     unique_filename = f"{workorder_id}_{uuid.uuid4()}{file_extension}"
     file_path = UPLOADS_DIR / unique_filename
+    total_bytes = 0
+    try:
+        async with aiofiles.open(file_path, 'wb') as out_file:
+            while True:
+                chunk = await file.read(1024 * 1024)  # 1MB
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_UPLOAD_BYTES:
+                    await out_file.close()
+                    if file_path.exists():
+                        file_path.unlink()
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Archivo demasiado grande. Máximo {MAX_UPLOAD_BYTES // (1024*1024)} MB."
+                    )
+                await out_file.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as e:
+        if file_path.exists():
+            file_path.unlink()
+        raise HTTPException(status_code=500, detail=f"Error guardando archivo: {e}")
 
-    async with aiofiles.open(file_path, 'wb') as out_file:
-        content = await file.read()
-        await out_file.write(content)
+    # If replacing, delete previous stored file
+    prev_stored = workorder.get("_stored_filename")
+    if prev_stored:
+        prev_path = UPLOADS_DIR / prev_stored
+        if prev_path.exists() and prev_path != file_path:
+            try:
+                prev_path.unlink()
+            except OSError:
+                pass
 
     attachment_url = f"/api/workorders/{workorder_id}/attachment"
     await db.workorders.update_one(
@@ -269,7 +368,7 @@ async def upload_attachment(workorder_id: str, file: UploadFile = File(...), use
         }}
     )
 
-    return {"filename": file.filename, "url": attachment_url, "message": "File uploaded successfully"}
+    return {"filename": file.filename, "url": attachment_url, "size": total_bytes, "message": "File uploaded successfully"}
 
 
 @api_router.get("/workorders/{workorder_id}/attachment")

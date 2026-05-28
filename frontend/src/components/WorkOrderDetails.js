@@ -127,14 +127,16 @@ export default function WorkOrderDetails({ workOrder, onClose, onEdit, onDownloa
         )}
 
         <div className="flex gap-3 pt-4">
-          <Button
-            data-testid="detail-edit-button"
-            onClick={onEdit}
-            className="flex-1 bg-gradient-to-r from-[#0F62FE] to-[#0043CE] text-white h-10 px-4 rounded-md font-medium"
-          >
-            <Edit className="mr-2 h-4 w-4" />
-            Editar
-          </Button>
+          {onEdit && (
+            <Button
+              data-testid="detail-edit-button"
+              onClick={onEdit}
+              className="flex-1 bg-gradient-to-r from-[#0F62FE] to-[#0043CE] text-white h-10 px-4 rounded-md font-medium"
+            >
+              <Edit className="mr-2 h-4 w-4" />
+              Editar
+            </Button>
+          )}
           <Button
             data-testid="detail-close-button"
             onClick={onClose}

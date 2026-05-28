@@ -112,6 +112,21 @@ class ResetRequest(BaseModel):
     new_password: str = Field(min_length=6, max_length=128)
 
 
+class UpdateProfileRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=6, max_length=128)
+
+
+class UpdateSecurityQuestionRequest(BaseModel):
+    current_password: str
+    question: str = Field(min_length=3, max_length=200)
+    answer: str = Field(min_length=1, max_length=200)
+
+
 class UserPublic(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
@@ -258,7 +273,8 @@ def build_auth_router(db) -> APIRouter:
 
     @router.get("/me")
     async def me(user: dict = Depends(get_current_user)):
-        return _user_to_public(user) if "security_question" in user or "created_at" in user else user
+        full = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+        return _user_to_public(full) if full else user
 
     @router.post("/refresh")
     async def refresh_token_endpoint(request: Request, response: Response):
@@ -308,6 +324,39 @@ def build_auth_router(db) -> APIRouter:
         new_hash = hash_password(body.new_password)
         await db.users.update_one({"id": user["id"]}, {"$set": {"password_hash": new_hash}})
         return {"message": "Contraseña actualizada correctamente"}
+
+    @router.put("/profile")
+    async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_current_user)):
+        await db.users.update_one({"id": user["id"]}, {"$set": {"name": body.name.strip()}})
+        updated = await db.users.find_one({"id": user["id"]})
+        return _user_to_public(updated)
+
+    @router.post("/change-password")
+    async def change_password(body: ChangePasswordRequest, user: dict = Depends(get_current_user)):
+        full = await db.users.find_one({"id": user["id"]})
+        if not full or not verify_password(body.current_password, full["password_hash"]):
+            raise HTTPException(status_code=401, detail="La contraseña actual es incorrecta")
+        await db.users.update_one(
+            {"id": user["id"]},
+            {"$set": {"password_hash": hash_password(body.new_password)}}
+        )
+        return {"message": "Contraseña actualizada"}
+
+    @router.put("/security-question")
+    async def update_security_question(body: UpdateSecurityQuestionRequest, user: dict = Depends(get_current_user)):
+        full = await db.users.find_one({"id": user["id"]})
+        if not full or not verify_password(body.current_password, full["password_hash"]):
+            raise HTTPException(status_code=401, detail="La contraseña actual es incorrecta")
+        await db.users.update_one(
+            {"id": user["id"]},
+            {"$set": {
+                "security_question": {
+                    "question": body.question.strip(),
+                    "answer_hash": hash_answer(body.answer),
+                }
+            }}
+        )
+        return {"message": "Pregunta de seguridad actualizada"}
 
     # expose dep for other modules
     router.get_current_user = get_current_user  # type: ignore[attr-defined]

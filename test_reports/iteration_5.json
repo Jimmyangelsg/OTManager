@@ -1,0 +1,52 @@
+{
+  "summary": "Iter 5 testing: 5 sets of new features on top of iter-4 baseline (profile page + change pwd + security question, upload validation, admin toggle/all_users + owner field, stats cards endpoint, keyboard shortcuts). Backend: added /app/backend/tests/test_new_features_iter5.py with 15 new tests (all PASS) — full suite now 44/44 PASS (29 prior + 15 new). Frontend: end-to-end Playwright flow exercised every feature in the request and every flow passed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_features_iter5.py",
+    "/app/backend/tests/test_auth_and_workorders.py",
+    "/app/test_reports/pytest/iteration_5.xml"
+  ],
+  "verifications": {
+    "backend_stats": "GET /api/workorders/stats returns {pending,in_progress,completed,total,with_attachment} scoped to user; with admin + ?all_users=true returns global totals (>= personal totals). Non-admin passing all_users=true is silently ignored (still scoped).",
+    "backend_admin_view": "GET /api/workorders?all_users=true as admin returns body.admin_view=true and each item has 'owner' field; same call as normal user returns admin_view=false (no other users' OTs leak).",
+    "backend_profile": "PUT /api/auth/profile updates name (401 without auth). /api/auth/me reflects new name.",
+    "backend_change_password": "POST /api/auth/change-password: wrong current -> 401; correct -> 200, new pwd logs in, old pwd 401.",
+    "backend_security_question": "PUT /api/auth/security-question: wrong current -> 401; correct -> 200, /api/auth/forgot-password returns the updated question.",
+    "backend_upload_validation": ".exe -> 400; valid .png -> 200; 11MB file -> 413; replacing attachment serves the new bytes via GET /attachment.",
+    "frontend_stats_cards": "stats-grid + stat-card-total/-pending/-in-progress/-completed all visible. Counts update after create (Total 1, Pendientes 1 after creating one Pendiente OT, see screenshot).",
+    "frontend_shortcuts": "'N' opens Sheet (input#ot_number visible); '?' opens [data-testid=shortcuts-dialog]; '/' focuses search input ('Buscar por número de OT... ( / )'); typing 'n' inside search did NOT open the Sheet (shortcuts correctly suppressed while input focused); Esc closes overlays.",
+    "frontend_profile": "/profile reached via user-menu-button -> link-to-profile; profile-title visible. Wrong current password -> profile-password-error shows 'La contraseña actual es incorrecta'. Correct -> success; after logout, OLD pwd produces login-error and NEW pwd logs in.",
+    "frontend_upload_exe": ".exe set via input[type=file] -> sonner toast 'Tipo de archivo no permitido. Aceptados: .pdf, .png, .jpg, .jpeg, .gif, .webp, .xlsx, .docx, .xls, .doc, .txt, .csv, .zip' and filename does NOT appear in DOM as attachment.",
+    "frontend_admin_toggle": "Normal user: admin-toggle-button NOT visible. Admin: visible, label toggles 'Vista personal' -> 'Vista global'; 'Vista global' badge appears in header; 'Vista global: el reordenamiento está deshabilitado' helper text visible; edit/delete buttons count = 0 in global view; owner is shown as a label under each OT (e.g. 'User' label on the row in screenshot)."
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "All 5 feature sets implemented cleanly with proper data-testid coverage matching the spec.",
+    "Backend: stats endpoint correctly distinguishes admin+all_users=true from per-user scoping; owner field only enriched in admin global view.",
+    "Backend: upload validation is server-side (extension + size) AND frontend pre-validates via lib/uploadValidation.js — double defence is good.",
+    "Backend: change-password and security-question both require current_password verification (401 on mismatch) — correct.",
+    "Frontend: shortcuts are properly gated when an INPUT/TEXTAREA/contenteditable is focused — verified by typing 'n' in the search box (no Sheet opened).",
+    "Frontend: admin global view hides edit/delete actions and disables reorder — exactly as spec requested."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_features_iter5.py (new — 15 tests across TestStats/TestAllUsersList/TestProfile/TestUpload)"
+  ],
+  "success_rate": {
+    "backend": "100% (44/44 pytest — 29 prior regression + 15 new iter-5)",
+    "frontend": "100% on every flow in the scope (stats cards, shortcuts N/?// + suppression, profile name/password/SQ, upload .exe rejection, admin toggle including global badge, hidden edit/delete, owner label, normal-user toggle hidden)"
+  },
+  "test_credentials": "admin@local.dev / admin123 (admin). New e2e users created during run: e2e_iter5b_<ts>@example.com (pwd ended as 'newpass99' after change-password test).",
+  "seed_data_creation": "TEST_A5_*, TEST_PROF_*, TEST_CP1_*, TEST_CP2_*, TEST_SQ1_*, TEST_SQ2_*, TEST_U_* users + their TEST_UP_/TEST_ST_/TEST_GLOB_/TEST_OWN_ workorders are created by the pytest suite (best-effort cleanup of OTs at teardown; users remain in DB).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Full app is in a green state. For regression, run: pytest /app/backend/tests/ -v (currently 44/44 PASS in ~22s). New testids worth knowing: stats-grid, stat-card-*, admin-toggle-button, shortcuts-dialog, open-shortcuts-button, close-shortcuts-button, link-to-profile, profile-* (name/current-password/new-password/confirm-password/sq-* variants), back-to-dashboard. Backend exposes GET /api/workorders/stats and ?all_users=true on list+stats for admin only.",
+  "rca of the issue": "No bugs to RCA — feature additions verified end-to-end."
+}

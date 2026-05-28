@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Upload, X } from 'lucide-react';
 import api, { formatApiErrorDetail } from '@/lib/api';
 import { STATUS_OPTIONS } from '@/lib/status';
+import { validateFile, formatBytes, ALLOWED_EXTENSIONS } from '@/lib/uploadValidation';
 
 const formSchema = z.object({
   ot_number: z.string().min(1, 'El número de OT es obligatorio'),
@@ -32,7 +33,15 @@ export default function CreateWorkOrderForm({ onSuccess }) {
   } = useForm({ resolver: zodResolver(formSchema) });
 
   const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) setSelectedFile(e.target.files[0]);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const err = validateFile(file);
+    if (err) {
+      toast.error(err);
+      e.target.value = '';
+      return;
+    }
+    setSelectedFile(file);
   };
 
   const onSubmit = async (data) => {
@@ -157,7 +166,10 @@ export default function CreateWorkOrderForm({ onSuccess }) {
         </Label>
         {selectedFile ? (
           <div data-testid="selected-file-display" className="flex items-center justify-between p-3 border border-slate-300 rounded-md bg-slate-50">
-            <span className="text-sm text-slate-700 truncate flex-1">{selectedFile.name}</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-slate-700 truncate">{selectedFile.name}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">{formatBytes(selectedFile.size)}</p>
+            </div>
             <Button
               data-testid="remove-file-button"
               type="button"
@@ -175,6 +187,7 @@ export default function CreateWorkOrderForm({ onSuccess }) {
               data-testid="file-upload-input"
               id="file"
               type="file"
+              accept={ALLOWED_EXTENSIONS.join(',')}
               onChange={handleFileChange}
               className="h-10 rounded-md border-slate-300"
             />
@@ -189,7 +202,9 @@ export default function CreateWorkOrderForm({ onSuccess }) {
             </Button>
           </div>
         )}
-        <p className="text-xs text-slate-500 mt-1">PDF, imágenes, documentos (opcional)</p>
+        <p className="text-xs text-slate-500 mt-1">
+          Máx 10 MB · PDF, imágenes, Office, txt/csv/zip (opcional)
+        </p>
       </div>
 
       <div className="flex gap-3 pt-4 border-t border-slate-200">

@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   Plus, Search, FileText, Download, Edit, Trash2, Filter,
   FileSpreadsheet, GripVertical, Paperclip, X, Calendar,
   User, Hash, ListChecks, Sparkles, LogOut, FileDown,
-  ChevronLeft, ChevronRight, UserCircle2
+  ChevronLeft, ChevronRight, UserCircle2, Settings,
+  Clock, CheckCircle2, Loader2, Inbox, Eye, Keyboard
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,24 +42,61 @@ function formatDateLabel(date) {
   return format(d, "dd MMM yyyy · HH:mm", { locale: es });
 }
 
+// --- Stat card ---
+function StatCard({ icon: Icon, label, value, accent, dataTestId }) {
+  return (
+    <div
+      data-testid={dataTestId}
+      className={`bg-white border ${accent.border} rounded-xl p-4 hover:shadow-sm transition-all`}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className={`h-8 w-8 rounded-lg ${accent.bg} flex items-center justify-center`}>
+          <Icon className={`h-4 w-4 ${accent.text}`} />
+        </div>
+        <span className={`text-[10px] uppercase tracking-wider font-bold ${accent.text}`}>{label}</span>
+      </div>
+      <p className="text-3xl font-black tracking-tight text-slate-900" style={{ fontFamily: 'Chivo, sans-serif' }}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const [workOrders, setWorkOrders] = useState([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [page, setPage] = useState(1);
+  const [stats, setStats] = useState({ pending: 0, in_progress: 0, completed: 0, total: 0 });
+  const [adminViewMode, setAdminViewMode] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRequestor, setFilterRequestor] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
+
+  const searchInputRef = useRef(null);
+  const isAdmin = user?.role === 'admin';
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (isAdmin && adminViewMode) params.append('all_users', 'true');
+      const { data } = await api.get(`/workorders/stats?${params.toString()}`);
+      setStats(data);
+    } catch (err) {
+      console.warn('Stats fetch failed', err);
+    }
+  }, [isAdmin, adminViewMode]);
 
   const fetchWorkOrders = useCallback(async (overridePage) => {
     try {
@@ -66,6 +105,7 @@ export default function Dashboard() {
       if (searchTerm) params.append('search', searchTerm);
       if (filterRequestor) params.append('requestor', filterRequestor);
       if (filterStatus && filterStatus !== 'all') params.append('status', filterStatus);
+      if (isAdmin && adminViewMode) params.append('all_users', 'true');
       params.append('page', overridePage ?? page);
       params.append('page_size', PAGE_SIZE);
 
@@ -81,11 +121,46 @@ export default function Dashboard() {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, searchTerm, filterRequestor, filterStatus]);
+  }, [page, searchTerm, filterRequestor, filterStatus, isAdmin, adminViewMode]);
 
   useEffect(() => {
     fetchWorkOrders();
-  }, [fetchWorkOrders]);
+    fetchStats();
+  }, [fetchWorkOrders, fetchStats]);
+
+  // --- Keyboard shortcuts ---
+  useEffect(() => {
+    const handler = (e) => {
+      // Skip shortcuts if user is typing in any input/textarea or sheet/dialog is open
+      const target = e.target;
+      const isTyping = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
+      const anySheetOpen = isCreateOpen || isDetailsOpen || isEditOpen || Boolean(pendingDelete);
+
+      if (e.key === 'Escape') {
+        if (isCreateOpen) setIsCreateOpen(false);
+        if (isDetailsOpen) setIsDetailsOpen(false);
+        if (isEditOpen) setIsEditOpen(false);
+        if (pendingDelete) setPendingDelete(null);
+        if (showShortcuts) setShowShortcuts(false);
+        return;
+      }
+
+      if (isTyping || anySheetOpen) return;
+
+      if (e.key === '/' || (e.key === 'k' && (e.metaKey || e.ctrlKey))) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        setIsCreateOpen(true);
+      } else if (e.key === '?') {
+        e.preventDefault();
+        setShowShortcuts((s) => !s);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isCreateOpen, isDetailsOpen, isEditOpen, pendingDelete, showShortcuts]);
 
   const handleSearch = () => {
     setPage(1);
@@ -100,6 +175,11 @@ export default function Dashboard() {
     setTimeout(() => fetchWorkOrders(1), 50);
   };
 
+  const refreshAll = useCallback(() => {
+    fetchWorkOrders();
+    fetchStats();
+  }, [fetchWorkOrders, fetchStats]);
+
   const handleViewDetails = (wo) => { setSelectedWorkOrder(wo); setIsDetailsOpen(true); };
   const handleEdit = (wo) => { setSelectedWorkOrder(wo); setIsEditOpen(true); };
 
@@ -109,7 +189,7 @@ export default function Dashboard() {
       await api.delete(`/workorders/${pendingDelete.id}`);
       toast.success(`OT ${pendingDelete.ot_number} eliminada`);
       setPendingDelete(null);
-      fetchWorkOrders();
+      refreshAll();
     } catch (error) {
       console.error('Error deleting:', error);
       toast.error('Error al eliminar la OT');
@@ -133,13 +213,12 @@ export default function Dashboard() {
     }
   };
 
-  const downloadExport = async (kind /* 'excel' | 'pdf' */) => {
+  const downloadExport = async (kind) => {
     try {
       const params = new URLSearchParams();
       if (searchTerm) params.append('search', searchTerm);
       if (filterRequestor) params.append('requestor', filterRequestor);
       if (filterStatus && filterStatus !== 'all') params.append('status', filterStatus);
-
       const response = await api.get(`/workorders/export/${kind}?${params.toString()}`, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
@@ -163,11 +242,14 @@ export default function Dashboard() {
 
   const onDragEnd = async (result) => {
     if (!result.destination || result.destination.index === result.source.index) return;
+    if (adminViewMode) {
+      toast.info('No podés reordenar en vista global de admin.');
+      return;
+    }
     const reordered = Array.from(workOrders);
     const [moved] = reordered.splice(result.source.index, 1);
     reordered.splice(result.destination.index, 0, moved);
     setWorkOrders(reordered);
-
     try {
       await api.post('/workorders/reorder', { ordered_ids: reordered.map((wo) => wo.id) });
       toast.success('Orden actualizado');
@@ -195,13 +277,31 @@ export default function Dashboard() {
                 <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 leading-none" style={{ fontFamily: 'Chivo, sans-serif' }}>
                   Órdenes de Trabajo
                 </h1>
-                <p className="text-xs text-slate-500 mt-1.5 font-medium">
+                <p className="text-xs text-slate-500 mt-1.5 font-medium flex items-center gap-2">
                   IBM Maximo · {total} {total === 1 ? 'orden' : 'órdenes'}
+                  {isAdmin && adminViewMode && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">
+                      <Eye className="h-2.5 w-2.5" /> Vista global
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
 
             <div className="flex gap-2 items-center">
+              {isAdmin && (
+                <Button
+                  data-testid="admin-toggle-button"
+                  variant={adminViewMode ? 'default' : 'outline'}
+                  onClick={() => { setAdminViewMode((v) => !v); setPage(1); }}
+                  className={`h-10 px-3 rounded-md font-medium text-xs ${adminViewMode ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'border-purple-300 text-purple-700 hover:bg-purple-50'}`}
+                  title="Alternar vista global (todos los usuarios)"
+                >
+                  <Eye className="mr-1.5 h-3.5 w-3.5" />
+                  {adminViewMode ? 'Vista global' : 'Vista personal'}
+                </Button>
+              )}
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" data-testid="export-menu-button" className="h-10 px-4 rounded-md font-medium text-sm border-slate-300 hover:bg-slate-50">
@@ -223,9 +323,10 @@ export default function Dashboard() {
 
               <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                 <SheetTrigger asChild>
-                  <Button data-testid="create-workorder-button" className="bg-gradient-to-r from-[#0F62FE] to-[#0043CE] hover:from-[#0043CE] hover:to-[#002D9C] text-white h-10 px-4 rounded-md font-medium text-sm shadow-md shadow-blue-500/20 hover:shadow-lg transition-all">
+                  <Button data-testid="create-workorder-button" className="bg-gradient-to-r from-[#0F62FE] to-[#0043CE] hover:from-[#0043CE] hover:to-[#002D9C] text-white h-10 px-4 rounded-md font-medium text-sm shadow-md shadow-blue-500/20">
                     <Plus className="mr-2 h-4 w-4" />
                     Nueva OT
+                    <kbd className="ml-2 hidden sm:inline-flex items-center justify-center h-5 px-1.5 rounded text-[10px] font-mono bg-white/20 border border-white/30">N</kbd>
                   </Button>
                 </SheetTrigger>
                 <SheetContent className="sm:max-w-[600px] w-full overflow-y-auto">
@@ -235,7 +336,7 @@ export default function Dashboard() {
                     </SheetTitle>
                     <SheetDescription>Completá los datos de la OT recibida en IBM Maximo</SheetDescription>
                   </SheetHeader>
-                  <CreateWorkOrderForm onSuccess={() => { setIsCreateOpen(false); fetchWorkOrders(); }} />
+                  <CreateWorkOrderForm onSuccess={() => { setIsCreateOpen(false); refreshAll(); }} />
                 </SheetContent>
               </Sheet>
 
@@ -258,6 +359,17 @@ export default function Dashboard() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild className="cursor-pointer">
+                    <Link to="/profile" data-testid="link-to-profile" className="flex items-center">
+                      <Settings className="mr-2 h-4 w-4" />
+                      Mi perfil
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowShortcuts(true)} className="cursor-pointer" data-testid="open-shortcuts-button">
+                    <Keyboard className="mr-2 h-4 w-4" />
+                    Atajos de teclado
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={logout}
                     data-testid="logout-button"
@@ -277,13 +389,17 @@ export default function Dashboard() {
               <div className="relative flex-1 min-w-[240px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
+                  ref={searchInputRef}
                   data-testid="search-input"
-                  placeholder="Buscar por número de OT..."
+                  placeholder="Buscar por número de OT... ( / )"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                  className="pl-10 h-10 rounded-md border-slate-300 focus:ring-2 focus:ring-[#0F62FE]/20 focus:border-[#0F62FE]"
+                  className="pl-10 pr-10 h-10 rounded-md border-slate-300 focus:ring-2 focus:ring-[#0F62FE]/20 focus:border-[#0F62FE]"
                 />
+                <kbd className="absolute right-3 top-1/2 -translate-y-1/2 h-5 px-1.5 hidden sm:inline-flex items-center rounded text-[10px] font-mono bg-slate-100 text-slate-500 border border-slate-200">
+                  /
+                </kbd>
               </div>
               <Button data-testid="search-button" onClick={handleSearch} className="bg-slate-900 hover:bg-slate-800 text-white h-10 px-5 rounded-md font-medium">
                 Buscar
@@ -348,6 +464,38 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="flex-1 px-6 py-6 max-w-[1600px] mx-auto w-full">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6" data-testid="stats-grid">
+          <StatCard
+            icon={Inbox}
+            label="Total"
+            value={stats.total}
+            accent={{ border: 'border-slate-200', bg: 'bg-slate-100', text: 'text-slate-600' }}
+            dataTestId="stat-card-total"
+          />
+          <StatCard
+            icon={Clock}
+            label="Pendientes"
+            value={stats.pending}
+            accent={{ border: 'border-amber-100', bg: 'bg-amber-50', text: 'text-amber-700' }}
+            dataTestId="stat-card-pending"
+          />
+          <StatCard
+            icon={Loader2}
+            label="En curso"
+            value={stats.in_progress}
+            accent={{ border: 'border-blue-100', bg: 'bg-blue-50', text: 'text-blue-700' }}
+            dataTestId="stat-card-in-progress"
+          />
+          <StatCard
+            icon={CheckCircle2}
+            label="Completadas"
+            value={stats.completed}
+            accent={{ border: 'border-emerald-100', bg: 'bg-emerald-50', text: 'text-emerald-700' }}
+            dataTestId="stat-card-completed"
+          />
+        </div>
+
         {loading ? (
           <div className="flex items-center justify-center py-32" data-testid="loading-indicator">
             <div className="flex items-center gap-3 text-slate-500">
@@ -381,18 +529,18 @@ export default function Dashboard() {
             <div className="flex items-center justify-between mb-3 px-1">
               <p className="text-xs text-slate-500 font-medium flex items-center gap-2">
                 <GripVertical className="h-3.5 w-3.5" />
-                Arrastrá las filas para reordenar
+                {adminViewMode ? 'Vista global: el reordenamiento está deshabilitado' : 'Arrastrá las filas para reordenar'}
               </p>
             </div>
 
             <DragDropContext onDragEnd={onDragEnd}>
-              <Droppable droppableId="workorders-list">
+              <Droppable droppableId="workorders-list" isDropDisabled={adminViewMode}>
                 {(provided) => (
                   <div ref={provided.innerRef} {...provided.droppableProps} data-testid="workorders-list" className="space-y-2">
                     {workOrders.map((wo, index) => {
                       const statusMeta = getStatusMeta(wo.status);
                       return (
-                        <Draggable key={wo.id} draggableId={wo.id} index={index}>
+                        <Draggable key={wo.id} draggableId={wo.id} index={index} isDragDisabled={adminViewMode}>
                           {(dragProvided, snapshot) => (
                             <div
                               ref={dragProvided.innerRef}
@@ -404,8 +552,8 @@ export default function Dashboard() {
                                 <div
                                   {...dragProvided.dragHandleProps}
                                   data-testid={`drag-handle-${wo.ot_number}`}
-                                  className="flex items-center px-2 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-600 group-hover:text-slate-500 transition-colors border-r border-slate-100"
-                                  title="Arrastrar para reordenar"
+                                  className={`flex items-center px-2 text-slate-300 border-r border-slate-100 ${adminViewMode ? 'opacity-30 cursor-not-allowed' : 'cursor-grab active:cursor-grabbing hover:text-slate-600 group-hover:text-slate-500'} transition-colors`}
+                                  title={adminViewMode ? 'Reordenar deshabilitado en vista global' : 'Arrastrar para reordenar'}
                                 >
                                   <GripVertical className="h-5 w-5" />
                                 </div>
@@ -438,6 +586,12 @@ export default function Dashboard() {
                                         <Calendar className="h-3 w-3" />
                                         {formatDateLabel(wo.created_at)}
                                       </p>
+                                      {wo.owner && (
+                                        <p className="text-[10px] text-purple-700 mt-1 truncate" title={wo.owner.email}>
+                                          <User className="inline h-2.5 w-2.5 mr-0.5" />
+                                          {wo.owner.name || wo.owner.email}
+                                        </p>
+                                      )}
                                     </div>
 
                                     <div className="md:col-span-2 min-w-0">
@@ -477,12 +631,16 @@ export default function Dashboard() {
                                       <Download className="h-4 w-4" />
                                     </Button>
                                   )}
-                                  <Button data-testid={`edit-workorder-${wo.ot_number}`} variant="ghost" size="sm" onClick={() => handleEdit(wo)} className="h-8 w-8 p-0 text-slate-500 hover:bg-amber-50 hover:text-amber-600" title="Editar">
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button data-testid={`delete-workorder-${wo.ot_number}`} variant="ghost" size="sm" onClick={() => setPendingDelete(wo)} className="h-8 w-8 p-0 text-slate-500 hover:bg-red-50 hover:text-red-600" title="Eliminar">
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
+                                  {!adminViewMode && (
+                                    <>
+                                      <Button data-testid={`edit-workorder-${wo.ot_number}`} variant="ghost" size="sm" onClick={() => handleEdit(wo)} className="h-8 w-8 p-0 text-slate-500 hover:bg-amber-50 hover:text-amber-600" title="Editar">
+                                        <Edit className="h-4 w-4" />
+                                      </Button>
+                                      <Button data-testid={`delete-workorder-${wo.ot_number}`} variant="ghost" size="sm" onClick={() => setPendingDelete(wo)} className="h-8 w-8 p-0 text-slate-500 hover:bg-red-50 hover:text-red-600" title="Eliminar">
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -496,7 +654,6 @@ export default function Dashboard() {
               </Droppable>
             </DragDropContext>
 
-            {/* Pagination */}
             {totalPages > 1 && (
               <div className="mt-6 flex items-center justify-between flex-wrap gap-3" data-testid="pagination">
                 <p className="text-xs text-slate-500 font-medium">
@@ -504,25 +661,11 @@ export default function Dashboard() {
                   <span className="text-slate-900 font-bold">{totalPages}</span> · {total} OTs en total
                 </p>
                 <div className="flex gap-2">
-                  <Button
-                    data-testid="pagination-prev"
-                    onClick={() => fetchWorkOrders(page - 1)}
-                    disabled={page <= 1}
-                    variant="outline"
-                    className="h-9 px-3 rounded-md"
-                  >
-                    <ChevronLeft className="h-4 w-4 mr-1" />
-                    Anterior
+                  <Button data-testid="pagination-prev" onClick={() => fetchWorkOrders(page - 1)} disabled={page <= 1} variant="outline" className="h-9 px-3 rounded-md">
+                    <ChevronLeft className="h-4 w-4 mr-1" /> Anterior
                   </Button>
-                  <Button
-                    data-testid="pagination-next"
-                    onClick={() => fetchWorkOrders(page + 1)}
-                    disabled={page >= totalPages}
-                    variant="outline"
-                    className="h-9 px-3 rounded-md"
-                  >
-                    Siguiente
-                    <ChevronRight className="h-4 w-4 ml-1" />
+                  <Button data-testid="pagination-next" onClick={() => fetchWorkOrders(page + 1)} disabled={page >= totalPages} variant="outline" className="h-9 px-3 rounded-md">
+                    Siguiente <ChevronRight className="h-4 w-4 ml-1" />
                   </Button>
                 </div>
               </div>
@@ -538,7 +681,7 @@ export default function Dashboard() {
             <WorkOrderDetails
               workOrder={selectedWorkOrder}
               onClose={() => setIsDetailsOpen(false)}
-              onEdit={() => { setIsDetailsOpen(false); setIsEditOpen(true); }}
+              onEdit={adminViewMode ? null : () => { setIsDetailsOpen(false); setIsEditOpen(true); }}
               onDownload={handleDownloadAttachment}
             />
           )}
@@ -558,7 +701,7 @@ export default function Dashboard() {
               </SheetHeader>
               <EditWorkOrderForm
                 workOrder={selectedWorkOrder}
-                onSuccess={() => { setIsEditOpen(false); fetchWorkOrders(); }}
+                onSuccess={() => { setIsEditOpen(false); refreshAll(); }}
               />
             </>
           )}
@@ -584,6 +727,46 @@ export default function Dashboard() {
             <AlertDialogCancel data-testid="cancel-delete-button">Cancelar</AlertDialogCancel>
             <AlertDialogAction data-testid="confirm-delete-button" onClick={confirmDelete} className="bg-red-600 hover:bg-red-700 text-white">
               Sí, eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Keyboard shortcuts modal */}
+      <AlertDialog open={showShortcuts} onOpenChange={setShowShortcuts}>
+        <AlertDialogContent data-testid="shortcuts-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Keyboard className="h-5 w-5" />
+              Atajos de teclado
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Acelerá tu flujo con estos atajos. Funcionan cuando no estás escribiendo en un campo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            {[
+              { keys: ['N'], desc: 'Crear nueva OT' },
+              { keys: ['/'], desc: 'Foco en el buscador' },
+              { keys: ['Ctrl', 'K'], desc: 'Foco en el buscador (alternativo)' },
+              { keys: ['Esc'], desc: 'Cerrar panel/ventana abierta' },
+              { keys: ['?'], desc: 'Mostrar/ocultar esta ayuda' },
+            ].map((row) => (
+              <div key={row.desc} className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-0">
+                <span className="text-sm text-slate-700">{row.desc}</span>
+                <div className="flex gap-1">
+                  {row.keys.map((k, i) => (
+                    <kbd key={i} className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded text-xs font-mono font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                      {k}
+                    </kbd>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogAction data-testid="close-shortcuts-button" onClick={() => setShowShortcuts(false)}>
+              Entendido
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
